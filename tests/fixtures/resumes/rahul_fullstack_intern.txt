@@ -1,0 +1,24 @@
+Rahul Nair
+rahul.nair@gmail.com | linkedin.com/in/rahul-nair-dev | github.com/rahulnair
+
+SUMMARY
+Student builder with experience shipping full-stack products and hackathon prototypes.
+
+EDUCATION
+B.Tech Information Technology, VJTI Mumbai
+
+SKILLS
+Python, JavaScript, React, Streamlit, Firebase, Firestore, SQL, Git
+
+PROJECTS
+HackHub
+- Built a hackathon team formation app with React, Firebase Auth, and Firestore.
+- Reached 400 student sign-ups across two campus events.
+
+Voice Notes Board
+- Built a shared note-taking board with live updates and browser audio upload.
+
+EXPERIENCE
+Software Intern, Peerflow
+- Implemented UI fixes, analytics events, and admin panel updates for internal tools.
+

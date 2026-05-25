@@ -1,0 +1,26 @@
+Nisha Verma
+nisha.verma@gmail.com | linkedin.com/in/nishaverma | github.com/nishav-ai
+
+SUMMARY
+Final-year computer science student focused on machine learning systems, applied NLP, and developer tooling.
+
+EDUCATION
+B.Tech in Computer Science, IIT Jodhpur, GPA 8.7/10
+
+TECHNICAL SKILLS
+Python, SQL, PyTorch, scikit-learn, FastAPI, Docker, GCP, Git, Streamlit
+
+PROJECTS
+Campus Mentor Bot
+- Built a retrieval augmented chatbot for campus FAQs using Python, FastAPI, and vector search.
+- Reduced repeated admin queries by 35% during student onboarding week.
+
+Interview Debrief Summarizer
+- Created an NLP pipeline that summarizes interviewer notes and clusters candidate concerns.
+- Evaluated prompts across 120 transcripts and improved summary acceptance to 81%.
+
+EXPERIENCE
+Machine Learning Intern, Quill Labs
+- Fine-tuned a text classification model for support routing and deployed the inference API with FastAPI.
+- Worked with product and analytics teams to review model quality each sprint.
+

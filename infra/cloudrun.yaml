@@ -1,0 +1,31 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: job-rejection-agent
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/sessionAffinity: "true"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 20
+      timeoutSeconds: 900
+      containers:
+        - image: us-docker.pkg.dev/PROJECT_ID/job-rejection-agent/job-rejection-agent:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MODEL_ID
+              value: gemini-2.5-flash
+            - name: EVAL_MODEL_ID
+              value: gemini-2.5-flash
+            - name: PHOENIX_PROJECT_NAME
+              value: job-rejection-agent
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+

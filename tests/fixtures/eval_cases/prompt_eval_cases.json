@@ -1,0 +1,15 @@
+[
+  {
+    "name": "grounding_guardrail",
+    "must_include": ["ats", "evidence", "level-fit", "do not invent"]
+  },
+  {
+    "name": "coaching_guardrail",
+    "must_include": ["exact edits", "under three hours", "recruiter"]
+  },
+  {
+    "name": "observability_guardrail",
+    "must_include": ["phoenix", "trace", "provenance"]
+  }
+]
+
