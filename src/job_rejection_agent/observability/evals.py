@@ -60,7 +60,20 @@ def _heuristic_annotation_payloads(packet: SavedJobPacket) -> list[dict[str, Any
     report = packet.report
     specificity_label = "yes" if report.project_reframes or report.under_evidenced_skills else "no"
     hallucination_label = "good"
+    heuristic = _heuristic_eval(packet)
     return [
+        {
+            "annotation_name": "actionability",
+            "label": heuristic["actionability"],
+            "score": _label_score("actionability", heuristic["actionability"]),
+            "explanation": "Fallback code-based actionability score derived from concrete edits and weekly action plan coverage.",
+        },
+        {
+            "annotation_name": "evidence_grounding",
+            "label": heuristic["evidence_grounding"],
+            "score": _label_score("evidence_grounding", heuristic["evidence_grounding"]),
+            "explanation": "Fallback code-based grounding score derived from provenance density and resume-linked recommendations.",
+        },
         {
             "annotation_name": "specificity",
             "label": specificity_label,
@@ -120,12 +133,23 @@ def evaluate_packet(
             choices={"grounded": 1.0, "partially_grounded": 0.5, "weakly_grounded": 0.0},
         ),
     ]
+    client = Client(base_url=settings.phoenix_query_base_url, api_key=settings.phoenix_api_key)
+    output = dict(heuristic)
+    llm_annotation_names: set[str] = set()
     try:
         results = evaluate_dataframe(dataframe=df, evaluators=evaluators)
         annotations_df = to_annotation_dataframe(results)
-        client = Client(base_url=settings.phoenix_base_url, api_key=settings.phoenix_api_key)
         client.spans.log_span_annotations_dataframe(dataframe=annotations_df)
-        for payload in _heuristic_annotation_payloads(packet):
+        for _, row in results.iterrows():
+            llm_annotation_names.add(row["annotation_name"])
+            output[row["annotation_name"]] = row["label"]
+    except Exception:
+        pass
+
+    for payload in _heuristic_annotation_payloads(packet):
+        if payload["annotation_name"] in llm_annotation_names:
+            continue
+        try:
             client.spans.add_span_annotation(
                 span_id=span_id,
                 annotation_name=payload["annotation_name"],
@@ -135,9 +159,6 @@ def evaluate_packet(
                 explanation=payload["explanation"],
                 metadata={"packet_id": packet.packet_id, "source": "job_rejection_agent"},
             )
-        output = dict(heuristic)
-        for _, row in results.iterrows():
-            output[row["annotation_name"]] = row["label"]
-        return output
-    except Exception:
-        return heuristic
+        except Exception:
+            continue
+    return output

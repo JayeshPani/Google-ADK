@@ -56,6 +56,14 @@ class Settings:
             return {}
         return {"Authorization": f"Bearer {self.phoenix_api_key}"}
 
+    @property
+    def phoenix_query_base_url(self) -> str:
+        if "/s/" in self.phoenix_base_url:
+            return self.phoenix_base_url.rstrip("/")
+        if "/s/" in self.phoenix_collector_endpoint:
+            return self.phoenix_collector_endpoint.rstrip("/")
+        return self.phoenix_base_url.rstrip("/")
+
 
 def _read_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)

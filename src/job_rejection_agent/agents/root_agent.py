@@ -108,6 +108,8 @@ class AgentRuntime:
         jd_text: str,
         rejection_notes: str,
     ) -> None:
+        span.set_attribute("session.id", session_id)
+        span.set_attribute("user.id", user_id)
         span.set_attribute("job_rejection.session_id", session_id)
         span.set_attribute("job_rejection.user_id", user_id)
         span.set_attribute("job_rejection.resume_name", Path(resume_path).name)

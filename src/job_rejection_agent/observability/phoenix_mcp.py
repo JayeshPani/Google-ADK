@@ -11,6 +11,26 @@ from job_rejection_agent.config import Settings, get_settings
 from .tracing import apply_phoenix_environment
 
 
+def _phoenix_mcp_env(settings: Settings) -> dict[str, str]:
+    return {
+        "PHOENIX_API_KEY": settings.phoenix_api_key or "",
+        "PHOENIX_HOST": settings.phoenix_query_base_url,
+        "PHOENIX_PROJECT": settings.phoenix_project_name,
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", ""),
+    }
+
+
+def _phoenix_mcp_args(settings: Settings) -> list[str]:
+    args = list(settings.phoenix_mcp_args)
+    if "--baseUrl" in args:
+        index = args.index("--baseUrl")
+        if index + 1 < len(args):
+            args[index + 1] = settings.phoenix_query_base_url
+            return args
+    return [*args, "--baseUrl", settings.phoenix_query_base_url]
+
+
 def build_phoenix_mcp_toolset(settings: Settings | None = None):
     settings = settings or get_settings()
     if not settings.phoenix_mcp_enabled or not settings.phoenix_api_key:
@@ -25,8 +45,10 @@ def build_phoenix_mcp_toolset(settings: Settings | None = None):
         connection_params=StdioConnectionParams(
             server_params=StdioServerParameters(
                 command=settings.phoenix_mcp_command,
-                args=list(settings.phoenix_mcp_args),
+                args=_phoenix_mcp_args(settings),
+                env=_phoenix_mcp_env(settings),
             ),
+            timeout=30.0,
         ),
     )
 
@@ -38,7 +60,7 @@ def _build_phoenix_client(settings: Settings) -> Any | None:
         from phoenix.client import Client
     except Exception:
         return None
-    return Client(base_url=settings.phoenix_base_url, api_key=settings.phoenix_api_key)
+    return Client(base_url=settings.phoenix_query_base_url, api_key=settings.phoenix_api_key)
 
 
 def _annotation_score(annotation_name: str, result: dict[str, Any] | None) -> float | None:
@@ -61,9 +83,42 @@ def _annotation_score(annotation_name: str, result: dict[str, Any] | None) -> fl
     return mappings.get(annotation_name, {}).get(label)
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    as_dict = getattr(value, "dict", None)
+    if callable(as_dict):
+        dumped = as_dict()
+        if isinstance(dumped, dict):
+            return dumped
+    value_dict = getattr(value, "__dict__", None)
+    if isinstance(value_dict, dict):
+        return dict(value_dict)
+    return {}
+
+
 def _extract_span_attributes(span: dict[str, Any]) -> dict[str, Any]:
-    attributes = span.get("attributes", {})
+    attributes = _as_dict(span).get("attributes", {})
     return attributes if isinstance(attributes, dict) else {}
+
+
+def _extract_trace_spans(traces: Iterable[Any]) -> list[dict[str, Any]]:
+    spans: list[dict[str, Any]] = []
+    for trace in traces:
+        trace_payload = _as_dict(trace)
+        raw_spans = trace_payload.get("spans", [])
+        if not isinstance(raw_spans, list):
+            continue
+        for span in raw_spans:
+            span_payload = _as_dict(span)
+            if span_payload:
+                spans.append(span_payload)
+    return spans
 
 
 def _batched(items: Iterable[str], size: int) -> list[list[str]]:
@@ -79,9 +134,9 @@ def _batched(items: Iterable[str], size: int) -> list[list[str]]:
     return batches
 
 
-def _extract_mcp_payload(result: Any) -> dict[str, Any]:
+def _extract_mcp_payload(result: Any) -> Any:
     structured = getattr(result, "structuredContent", None)
-    if isinstance(structured, dict):
+    if isinstance(structured, (dict, list)):
         return structured
     for block in getattr(result, "content", []):
         block_type = getattr(block, "type", None)
@@ -105,6 +160,7 @@ def _normalize_trace_summaries(
     annotations: list[dict[str, Any]],
     *,
     limit: int,
+    session_id: str | None = None,
 ) -> list[dict[str, Any]]:
     annotations_by_span: dict[str, list[dict[str, Any]]] = {}
     for annotation in annotations:
@@ -115,7 +171,8 @@ def _normalize_trace_summaries(
 
     summaries: list[dict[str, Any]] = []
     for span in spans:
-        context = span.get("context", {})
+        span_payload = _as_dict(span)
+        context = span_payload.get("context", {})
         span_id = context.get("span_id", "")
         span_annotations = annotations_by_span.get(span_id, [])
         if not span_annotations:
@@ -144,14 +201,17 @@ def _normalize_trace_summaries(
         if not scores:
             continue
         composite_score = round(sum(scores) / len(scores), 3)
-        attributes = _extract_span_attributes(span)
+        attributes = _extract_span_attributes(span_payload)
+        current_session_id = attributes.get("job_rejection.session_id", "")
+        if session_id and current_session_id != session_id:
+            continue
         summaries.append(
             {
                 "trace_id": context.get("trace_id", "unknown"),
                 "span_id": span_id or "unknown",
-                "session_id": attributes.get("job_rejection.session_id", ""),
-                "name": span.get("name", "unknown"),
-                "status": span.get("status_code", "unknown"),
+                "session_id": current_session_id,
+                "name": span_payload.get("name", "unknown"),
+                "status": span_payload.get("status_code", "unknown"),
                 "packet_id": attributes.get("job_rejection.packet_id", ""),
                 "role_title": attributes.get("job_rejection.role_title", ""),
                 "company_name": attributes.get("job_rejection.company_name", ""),
@@ -170,6 +230,7 @@ def _normalize_trace_summaries(
 async def _query_trace_summaries_via_mcp_async(
     limit: int,
     settings: Settings,
+    session_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if not settings.phoenix_mcp_enabled:
         return []
@@ -179,17 +240,10 @@ async def _query_trace_summaries_via_mcp_async(
     except ImportError:
         return []
 
-    env = {
-        "PHOENIX_API_KEY": settings.phoenix_api_key or "",
-        "PHOENIX_HOST": settings.phoenix_base_url,
-        "PHOENIX_PROJECT": settings.phoenix_project_name,
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", ""),
-    }
     server_params = StdioServerParameters(
         command=settings.phoenix_mcp_command,
-        args=list(settings.phoenix_mcp_args),
-        env=env,
+        args=_phoenix_mcp_args(settings),
+        env=_phoenix_mcp_env(settings),
     )
     eval_names = [
         "actionability",
@@ -206,28 +260,40 @@ async def _query_trace_summaries_via_mcp_async(
             if "get-spans" not in tool_names or "get-span-annotations" not in tool_names:
                 return []
 
-            spans: list[dict[str, Any]] = []
-            cursor = None
-            target = max(limit * 8, 20)
-            while len(spans) < target:
-                args: dict[str, Any] = {
-                    "projectName": settings.phoenix_project_name,
-                    "limit": min(target, 1000),
-                }
-                if cursor:
-                    args["cursor"] = cursor
-                response = await session.call_tool("get-spans", args)
+            target = max(limit * 8, 20, 100 if session_id else 20)
+            session_spans: list[dict[str, Any]] = []
+            if session_id and "list-traces" in tool_names:
+                response = await session.call_tool(
+                    "list-traces",
+                    {
+                        "project_identifier": settings.phoenix_project_name,
+                        "limit": max(target, 20),
+                        "include_annotations": False,
+                    },
+                )
                 payload = _extract_mcp_payload(response)
-                batch = payload.get("spans", [])
-                if isinstance(batch, list):
-                    spans.extend(item for item in batch if isinstance(item, dict))
-                cursor = payload.get("nextCursor")
-                if not cursor or not batch:
-                    break
-
-            session_spans = [
-                span for span in spans if span.get("name") == "job_rejection_session"
-            ][:target]
+                raw_traces = payload if isinstance(payload, list) else payload.get("traces", [])
+                trace_spans = _extract_trace_spans(raw_traces)
+                session_spans = [span for span in trace_spans if span.get("name") == "job_rejection_session"][:target]
+            else:
+                spans: list[dict[str, Any]] = []
+                cursor = None
+                while len(spans) < target:
+                    args: dict[str, Any] = {
+                        "projectName": settings.phoenix_project_name,
+                        "limit": min(target, 1000),
+                    }
+                    if cursor:
+                        args["cursor"] = cursor
+                    response = await session.call_tool("get-spans", args)
+                    payload = _extract_mcp_payload(response)
+                    batch = payload.get("spans", [])
+                    if isinstance(batch, list):
+                        spans.extend(_as_dict(item) for item in batch if _as_dict(item))
+                    cursor = payload.get("nextCursor")
+                    if not cursor or not batch:
+                        break
+                session_spans = [span for span in spans if span.get("name") == "job_rejection_session"][:target]
             if not session_spans:
                 return []
             span_ids = [
@@ -242,11 +308,10 @@ async def _query_trace_summaries_via_mcp_async(
                     response = await session.call_tool(
                         "get-span-annotations",
                         {
-                            "projectName": settings.phoenix_project_name,
-                            "spanIds": batch_ids,
-                            "includeAnnotationNames": eval_names,
+                            "project_identifier": settings.phoenix_project_name,
+                            "span_ids": batch_ids,
+                            "include_annotation_names": eval_names,
                             "limit": 1000,
-                            **({"cursor": cursor} if cursor else {}),
                         },
                     )
                     payload = _extract_mcp_payload(response)
@@ -256,17 +321,25 @@ async def _query_trace_summaries_via_mcp_async(
                     cursor = payload.get("nextCursor")
                     if not cursor or not batch:
                         break
-            return _normalize_trace_summaries(session_spans, annotations, limit=limit)
+            return _normalize_trace_summaries(session_spans, annotations, limit=limit, session_id=session_id)
 
 
-def _query_trace_summaries_via_mcp(limit: int, settings: Settings) -> list[dict[str, Any]]:
+def _query_trace_summaries_via_mcp(
+    limit: int,
+    settings: Settings,
+    session_id: str | None = None,
+) -> list[dict[str, Any]]:
     try:
-        return asyncio.run(_query_trace_summaries_via_mcp_async(limit, settings))
+        return asyncio.run(_query_trace_summaries_via_mcp_async(limit, settings, session_id=session_id))
     except RuntimeError:
         return []
 
 
-def _query_trace_summaries_via_client(limit: int, settings: Settings) -> list[dict[str, Any]]:
+def _query_trace_summaries_via_client(
+    limit: int,
+    settings: Settings,
+    session_id: str | None = None,
+) -> list[dict[str, Any]]:
     client = _build_phoenix_client(settings)
     if client is None:
         return []
@@ -276,11 +349,35 @@ def _query_trace_summaries_via_client(limit: int, settings: Settings) -> list[di
         "specificity",
         "non_hallucination",
     ]
+    if session_id:
+        try:
+            traces = client.traces.get_traces(
+                project_identifier=settings.phoenix_project_name,
+                session_id=session_id,
+                include_spans=True,
+                limit=max(limit, 10),
+            )
+            session_spans = [
+                span for span in _extract_trace_spans(traces) if span.get("name") == "job_rejection_session"
+            ]
+            if session_spans:
+                annotations = client.spans.get_span_annotations(
+                    span_ids=[span.get("context", {}).get("span_id", "") for span in session_spans if span.get("context", {}).get("span_id")],
+                    project_identifier=settings.phoenix_project_name,
+                    include_annotation_names=eval_names,
+                )
+                return _normalize_trace_summaries(session_spans, annotations, limit=limit, session_id=session_id)
+        except Exception:
+            pass
     try:
+        span_filters: dict[str, Any] = {}
+        if session_id:
+            span_filters["job_rejection.session_id"] = session_id
         spans = client.spans.get_spans(
             project_identifier=settings.phoenix_project_name,
             name="job_rejection_session",
-            limit=max(limit * 8, 20),
+            attributes=span_filters or None,
+            limit=max(limit * 8, 20, 100 if session_id else 20),
         )
     except Exception:
         return []
@@ -294,7 +391,7 @@ def _query_trace_summaries_via_client(limit: int, settings: Settings) -> list[di
         )
     except Exception:
         return []
-    return _normalize_trace_summaries(spans, annotations, limit=limit)
+    return _normalize_trace_summaries(spans, annotations, limit=limit, session_id=session_id)
 
 
 def query_low_scoring_trace_summaries(
@@ -312,3 +409,152 @@ def query_low_scoring_trace_summaries(
 
 def query_recent_trace_summaries(limit: int = 5, settings: Settings | None = None) -> list[dict[str, Any]]:
     return query_low_scoring_trace_summaries(limit=limit, settings=settings)
+
+
+def query_trace_summary_by_session_id(
+    session_id: str,
+    *,
+    settings: Settings | None = None,
+) -> dict[str, Any] | None:
+    settings = settings or get_settings()
+    if not settings.phoenix_api_key or not session_id:
+        return None
+    summaries = _query_trace_summaries_via_mcp(limit=1, settings=settings, session_id=session_id)
+    if not summaries:
+        summaries = _query_trace_summaries_via_client(limit=1, settings=settings, session_id=session_id)
+        if summaries:
+            summaries[0]["query_source"] = "client"
+    elif summaries:
+        summaries[0]["query_source"] = "mcp"
+    return summaries[0] if summaries else None
+
+
+def query_trace_summary_by_ids(
+    *,
+    trace_id: str,
+    span_id: str,
+    settings: Settings | None = None,
+) -> dict[str, Any] | None:
+    settings = settings or get_settings()
+    if not settings.phoenix_api_key or not trace_id or not span_id:
+        return None
+
+    mcp_summaries = _query_trace_summary_by_ids_via_mcp(trace_id=trace_id, span_id=span_id, settings=settings)
+    if mcp_summaries:
+        mcp_summaries["query_source"] = "mcp"
+        return mcp_summaries
+
+    client_summary = _query_trace_summary_by_ids_via_client(trace_id=trace_id, span_id=span_id, settings=settings)
+    if client_summary:
+        client_summary["query_source"] = "client"
+    return client_summary
+
+
+def _query_trace_summary_by_ids_via_mcp(
+    *,
+    trace_id: str,
+    span_id: str,
+    settings: Settings,
+) -> dict[str, Any] | None:
+    try:
+        return asyncio.run(_query_trace_summary_by_ids_via_mcp_async(trace_id=trace_id, span_id=span_id, settings=settings))
+    except RuntimeError:
+        return None
+
+
+async def _query_trace_summary_by_ids_via_mcp_async(
+    *,
+    trace_id: str,
+    span_id: str,
+    settings: Settings,
+) -> dict[str, Any] | None:
+    if not settings.phoenix_mcp_enabled:
+        return None
+    try:
+        from mcp.client.session import ClientSession
+        from mcp.client.stdio import StdioServerParameters, stdio_client
+    except ImportError:
+        return None
+
+    server_params = StdioServerParameters(
+        command=settings.phoenix_mcp_command,
+        args=_phoenix_mcp_args(settings),
+        env=_phoenix_mcp_env(settings),
+    )
+
+    async with stdio_client(server_params) as streams:
+        async with ClientSession(*streams) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+            tool_names = {tool.name for tool in tools.tools}
+            if "get-trace" not in tool_names or "get-span-annotations" not in tool_names:
+                return None
+            response = await session.call_tool(
+                "get-trace",
+                {
+                    "project_identifier": settings.phoenix_project_name,
+                    "trace_id": trace_id,
+                    "include_annotations": False,
+                },
+            )
+            payload = _extract_mcp_payload(response)
+            if isinstance(payload, list):
+                trace_payload = _as_dict(payload[0]) if payload else {}
+            elif isinstance(payload, dict):
+                trace_payload = _as_dict(payload.get("trace", payload))
+            else:
+                trace_payload = {}
+            spans = [span for span in _extract_trace_spans([trace_payload]) if span.get("context", {}).get("span_id") == span_id]
+            if not spans:
+                return None
+            response = await session.call_tool(
+                "get-span-annotations",
+                {
+                    "project_identifier": settings.phoenix_project_name,
+                    "span_ids": [span_id],
+                    "include_annotation_names": [
+                        "actionability",
+                        "evidence_grounding",
+                        "specificity",
+                        "non_hallucination",
+                    ],
+                    "limit": 100,
+                },
+            )
+            annotations = _extract_mcp_payload(response).get("annotations", [])
+            summaries = _normalize_trace_summaries(spans, annotations, limit=1)
+            return summaries[0] if summaries else None
+
+
+def _query_trace_summary_by_ids_via_client(
+    *,
+    trace_id: str,
+    span_id: str,
+    settings: Settings,
+) -> dict[str, Any] | None:
+    client = _build_phoenix_client(settings)
+    if client is None:
+        return None
+    try:
+        spans = client.spans.get_spans(
+            project_identifier=settings.phoenix_project_name,
+            trace_ids=[trace_id],
+            name="job_rejection_session",
+            limit=10,
+        )
+        annotations = client.spans.get_span_annotations(
+            span_ids=[span_id],
+            project_identifier=settings.phoenix_project_name,
+            include_annotation_names=[
+                "actionability",
+                "evidence_grounding",
+                "specificity",
+                "non_hallucination",
+            ],
+            limit=100,
+        )
+    except Exception:
+        return None
+    filtered_spans = [span for span in spans if _as_dict(span).get("context", {}).get("span_id") == span_id]
+    summaries = _normalize_trace_summaries(filtered_spans, annotations, limit=1)
+    return summaries[0] if summaries else None
