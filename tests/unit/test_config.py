@@ -64,6 +64,22 @@ class ConfigTests(unittest.TestCase):
             ),
         )
 
+    def test_settings_expose_model_fallback_candidates(self) -> None:
+        settings = config.Settings(
+            model_id="gemini-2.5-flash",
+            model_fallbacks=("gemini-2.5-flash-lite", "gemini-2.5-flash"),
+            eval_model_id="gemini-2.5-flash",
+            eval_model_fallbacks=("gemini-3.1-flash-lite",),
+        )
+        self.assertEqual(
+            settings.generation_model_candidates,
+            ("gemini-2.5-flash", "gemini-2.5-flash-lite"),
+        )
+        self.assertEqual(
+            settings.evaluation_model_candidates,
+            ("gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

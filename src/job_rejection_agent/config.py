@@ -8,6 +8,8 @@ from functools import lru_cache
 from pathlib import Path
 import shutil
 
+from job_rejection_agent.google_models import dedupe_model_ids
+
 try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover - allows local tests before dependencies are installed.
@@ -26,6 +28,8 @@ class Settings:
     app_name: str = "job-rejection-agent"
     model_id: str = "gemini-2.5-flash"
     eval_model_id: str = "gemini-2.5-flash"
+    model_fallbacks: tuple[str, ...] = ("gemini-2.5-flash-lite",)
+    eval_model_fallbacks: tuple[str, ...] = ("gemini-2.5-flash-lite",)
     google_api_key: str | None = None
     google_cloud_project: str | None = None
     google_cloud_location: str = "us-central1"
@@ -65,6 +69,14 @@ class Settings:
             return self.phoenix_collector_endpoint.rstrip("/")
         return self.phoenix_base_url.rstrip("/")
 
+    @property
+    def generation_model_candidates(self) -> tuple[str, ...]:
+        return dedupe_model_ids((self.model_id,), self.model_fallbacks)
+
+    @property
+    def evaluation_model_candidates(self) -> tuple[str, ...]:
+        return dedupe_model_ids((self.eval_model_id,), self.eval_model_fallbacks, self.model_fallbacks)
+
 
 def _read_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -102,6 +114,12 @@ def _read_mcp_args(
     return tuple(part.strip() for part in hydrated.split(",") if part.strip())
 
 
+def _read_model_list(raw: str | None, *, default: tuple[str, ...]) -> tuple[str, ...]:
+    if not raw:
+        return default
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     load_dotenv()
@@ -115,6 +133,14 @@ def get_settings() -> Settings:
     return Settings(
         model_id=os.getenv("MODEL_ID", "gemini-2.5-flash"),
         eval_model_id=os.getenv("EVAL_MODEL_ID", os.getenv("MODEL_ID", "gemini-2.5-flash")),
+        model_fallbacks=_read_model_list(
+            os.getenv("MODEL_FALLBACKS"),
+            default=("gemini-2.5-flash-lite",),
+        ),
+        eval_model_fallbacks=_read_model_list(
+            os.getenv("EVAL_MODEL_FALLBACKS"),
+            default=("gemini-2.5-flash-lite",),
+        ),
         google_api_key=google_api_key or None,
         google_cloud_project=os.getenv("GOOGLE_CLOUD_PROJECT") or None,
         google_cloud_location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),

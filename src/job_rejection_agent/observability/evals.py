@@ -6,6 +6,7 @@ from typing import Any
 
 from job_rejection_agent.config import Settings, get_settings
 from job_rejection_agent.domain import SavedJobPacket
+from job_rejection_agent.google_models import is_resource_exhausted_error
 from .tracing import apply_phoenix_environment
 
 
@@ -119,33 +120,37 @@ def evaluate_packet(
 
     coaching_output = output_text or packet.report.to_markdown()
     df = pd.DataFrame([{"output": coaching_output, "span_id": span_id or packet.session_id}])
-    llm = LLM(provider="google", model=settings.eval_model_id)
-    evaluators = [
-        ClassificationEvaluator(
-            name="actionability",
-            prompt_template=ACTIONABILITY_TEMPLATE,
-            llm=llm,
-            choices={"good": 1.0, "needs_improvement": 0.5, "bad": 0.0},
-        ),
-        ClassificationEvaluator(
-            name="evidence_grounding",
-            prompt_template=GROUNDING_TEMPLATE,
-            llm=llm,
-            choices={"grounded": 1.0, "partially_grounded": 0.5, "weakly_grounded": 0.0},
-        ),
-    ]
     client = Client(base_url=settings.phoenix_query_base_url, api_key=settings.phoenix_api_key)
     output = dict(heuristic)
     llm_annotation_names: set[str] = set()
-    try:
-        results = evaluate_dataframe(dataframe=df, evaluators=evaluators)
-        annotations_df = to_annotation_dataframe(results)
-        client.spans.log_span_annotations_dataframe(dataframe=annotations_df)
-        for _, row in results.iterrows():
-            llm_annotation_names.add(row["annotation_name"])
-            output[row["annotation_name"]] = row["label"]
-    except Exception:
-        pass
+    for model_id in settings.evaluation_model_candidates:
+        llm = LLM(provider="google", model=model_id)
+        evaluators = [
+            ClassificationEvaluator(
+                name="actionability",
+                prompt_template=ACTIONABILITY_TEMPLATE,
+                llm=llm,
+                choices={"good": 1.0, "needs_improvement": 0.5, "bad": 0.0},
+            ),
+            ClassificationEvaluator(
+                name="evidence_grounding",
+                prompt_template=GROUNDING_TEMPLATE,
+                llm=llm,
+                choices={"grounded": 1.0, "partially_grounded": 0.5, "weakly_grounded": 0.0},
+            ),
+        ]
+        try:
+            results = evaluate_dataframe(dataframe=df, evaluators=evaluators)
+            annotations_df = to_annotation_dataframe(results)
+            client.spans.log_span_annotations_dataframe(dataframe=annotations_df)
+            for _, row in results.iterrows():
+                llm_annotation_names.add(row["annotation_name"])
+                output[row["annotation_name"]] = row["label"]
+            break
+        except Exception as exc:
+            if is_resource_exhausted_error(exc):
+                continue
+            continue
 
     for payload in _heuristic_annotation_payloads(packet):
         if payload["annotation_name"] in llm_annotation_names:

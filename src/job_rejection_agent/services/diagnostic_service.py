@@ -17,6 +17,7 @@ from job_rejection_agent.coaching import (
 )
 from job_rejection_agent.config import Settings, get_settings
 from job_rejection_agent.domain import DiagnosticReport, JobRequirements, ResumeFacts, SavedJobPacket
+from job_rejection_agent.google_models import is_resource_exhausted_error
 from job_rejection_agent.ingestion import parse_job_description, parse_rejection_notes, parse_resume_file
 from job_rejection_agent.persistence import JobTracker, build_packet_repository
 
@@ -70,14 +71,23 @@ class GeminiAugmenter:
         except ImportError:
             return None
         client = genai.Client(api_key=self.settings.google_api_key)
-        response = client.models.generate_content(
-            model=self.settings.model_id,
-            contents=prompt,
-        )
-        text = getattr(response, "text", None)
-        if not text:
-            return None
-        return self._extract_json(text)
+        for model_id in self.settings.generation_model_candidates:
+            try:
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=prompt,
+                )
+            except Exception as exc:
+                if is_resource_exhausted_error(exc):
+                    continue
+                continue
+            text = getattr(response, "text", None)
+            if not text:
+                continue
+            payload = self._extract_json(text)
+            if payload:
+                return payload
+        return None
 
     def _normalize_text(self, value: Any) -> str | None:
         if isinstance(value, str):

@@ -12,6 +12,7 @@ from typing import Any
 
 from job_rejection_agent.config import Settings, get_settings
 from job_rejection_agent.domain import ImprovementRun
+from job_rejection_agent.google_models import is_resource_exhausted_error
 
 from .live_verifier import REQUIRED_ANNOTATION_NAMES, get_live_network_test_skip_reason, wait_for_trace_readback
 from .phoenix_mcp import query_low_scoring_trace_summaries
@@ -83,16 +84,21 @@ class PromptOptimizer:
             from google import genai
         except ImportError:
             return None
-        try:
-            client = genai.Client(api_key=self.settings.google_api_key)
-            response = client.models.generate_content(
-                model=self.settings.model_id,
-                contents=prompt,
-            )
-        except Exception:
-            return None
-        text = getattr(response, "text", None)
-        return text.strip() if text else None
+        client = genai.Client(api_key=self.settings.google_api_key)
+        for model_id in self.settings.generation_model_candidates:
+            try:
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=prompt,
+                )
+            except Exception as exc:
+                if is_resource_exhausted_error(exc):
+                    continue
+                continue
+            text = getattr(response, "text", None)
+            if text:
+                return text.strip()
+        return None
 
     def _heuristic_additions(self, baseline: str, traces: list[dict[str, Any]]) -> tuple[list[str], str]:
         additions: list[str] = []

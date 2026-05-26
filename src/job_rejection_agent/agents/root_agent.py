@@ -10,6 +10,7 @@ from typing import Any
 import uuid
 
 from job_rejection_agent.config import Settings, get_settings
+from job_rejection_agent.google_models import is_resource_exhausted_error
 from job_rejection_agent.observability import (
     configure_tracing,
     evaluate_packet,
@@ -86,17 +87,17 @@ class AgentRuntime:
         try:
             import google.adk  # noqa: F401
             import google.genai  # noqa: F401
-            return bool(self.settings.google_api_key)
+            return bool(self.settings.google_api_key and self.settings.generation_model_candidates)
         except Exception:
             return False
 
-    def build_agent(self, *, prompt_text_override: str | None = None):
+    def build_agent(self, *, prompt_text_override: str | None = None, model_override: str | None = None):
         from google.adk.agents import LlmAgent
 
         prompt = prompt_text_override or Path(self.settings.prompt_path).read_text(encoding="utf-8")
         instruction = prompt.rstrip() + "\n\nSpecialist guidance:\n" + compose_specialist_context()
         return LlmAgent(
-            model=self.settings.model_id,
+            model=model_override or self.settings.model_id,
             name="JobRejectionCoach",
             description="Diagnoses job rejections and generates exact patch plans.",
             instruction=instruction,
@@ -113,6 +114,7 @@ class AgentRuntime:
         jd_text: str,
         rejection_notes: str,
         prompt_text_override: str | None = None,
+        model_candidates: tuple[str, ...] = (),
     ) -> None:
         span.set_attribute("session.id", session_id)
         span.set_attribute("user.id", user_id)
@@ -122,11 +124,64 @@ class AgentRuntime:
         span.set_attribute("job_rejection.jd_length", len(jd_text))
         span.set_attribute("job_rejection.has_rejection_notes", bool(rejection_notes.strip()))
         span.set_attribute("job_rejection.prompt_source", "override" if prompt_text_override else "default")
+        if model_candidates:
+            span.set_attribute("job_rejection.model_candidates", " | ".join(model_candidates))
         if prompt_text_override:
             span.set_attribute(
                 "job_rejection.prompt_fingerprint",
                 hashlib.sha256(prompt_text_override.encode("utf-8")).hexdigest()[:16],
             )
+
+    async def _reset_adk_session(
+        self,
+        *,
+        session_service: Any,
+        user_id: str,
+        session_id: str,
+    ) -> None:
+        existing = await session_service.get_session(
+            app_name=self.settings.app_name,
+            user_id=user_id,
+            session_id=session_id,
+        )
+        if existing is not None:
+            await session_service.delete_session(
+                app_name=self.settings.app_name,
+                user_id=user_id,
+                session_id=session_id,
+            )
+        await session_service.create_session(
+            app_name=self.settings.app_name,
+            user_id=user_id,
+            session_id=session_id,
+        )
+
+    async def _run_adk_attempt(
+        self,
+        *,
+        model_id: str,
+        session_service: Any,
+        session_id: str,
+        user_id: str,
+        user_message: Any,
+        prompt_text_override: str | None = None,
+    ) -> str:
+        from google.adk.runners import Runner
+
+        runner = Runner(
+            app_name=self.settings.app_name,
+            agent=self.build_agent(prompt_text_override=prompt_text_override, model_override=model_id),
+            session_service=session_service,
+        )
+        final_text = ""
+        async for event in runner.run_async(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=user_message,
+        ):
+            if hasattr(event, "is_final_response") and event.is_final_response():
+                final_text = getattr(event, "stringify_content", lambda: "")() or final_text
+        return final_text
 
     def _record_result_attributes(self, span: Any, *, packet: Any, output_text: str) -> None:
         span.set_attribute("job_rejection.packet_id", packet.packet_id)
@@ -153,6 +208,7 @@ class AgentRuntime:
         root_span_id = None
         trace_ids: dict[str, str] = {}
         tracing_enabled = configure_tracing(self.settings)
+        model_candidates = self.settings.generation_model_candidates
         span_context_manager = nullcontext(None)
         if tracing_enabled:
             from opentelemetry import trace as otel_trace
@@ -173,6 +229,7 @@ class AgentRuntime:
                     jd_text=jd_text,
                     rejection_notes=rejection_notes,
                     prompt_text_override=prompt_text_override,
+                    model_candidates=model_candidates,
                 )
                 span_context = root_span.get_span_context()
                 root_span_id = format_span_id(span_context.span_id)
@@ -193,20 +250,9 @@ class AgentRuntime:
                 packet = result.packet
                 final_text = render_packet_markdown(result.packet)
             else:
-                from google.adk.runners import Runner
                 from google.genai import types
 
                 session_service = create_session_service(self.settings)
-                await session_service.create_session(
-                    app_name=self.settings.app_name,
-                    user_id=user_id,
-                    session_id=session_id,
-                )
-                runner = Runner(
-                    app_name=self.settings.app_name,
-                    agent=self.build_agent(prompt_text_override=prompt_text_override),
-                    session_service=session_service,
-                )
                 user_message = types.Content(
                     role="user",
                     parts=[
@@ -221,16 +267,54 @@ class AgentRuntime:
                         )
                     ],
                 )
-                async for event in runner.run_async(
-                    user_id=user_id,
-                    session_id=session_id,
-                    new_message=user_message,
-                ):
-                    if hasattr(event, "is_final_response") and event.is_final_response():
-                        final_text = getattr(event, "stringify_content", lambda: "")() or final_text
-                packet_candidates = self.service.tracker.list_entries(user_id)
-                packet_id = packet_candidates[0].packet_id if packet_candidates else ""
-                packet = self.service.tracker.get(packet_id) if packet_id else None
+                selected_model = ""
+                last_model_error: Exception | None = None
+                for model_id in model_candidates:
+                    try:
+                        await self._reset_adk_session(
+                            session_service=session_service,
+                            user_id=user_id,
+                            session_id=session_id,
+                        )
+                        final_text = await self._run_adk_attempt(
+                            model_id=model_id,
+                            session_service=session_service,
+                            session_id=session_id,
+                            user_id=user_id,
+                            user_message=user_message,
+                            prompt_text_override=prompt_text_override,
+                        )
+                        selected_model = model_id
+                        break
+                    except Exception as exc:
+                        if is_resource_exhausted_error(exc):
+                            last_model_error = exc
+                            continue
+                        raise
+
+                if selected_model:
+                    if root_span is not None:
+                        root_span.set_attribute("job_rejection.selected_model", selected_model)
+                    packet_candidates = self.service.tracker.list_entries(user_id)
+                    packet_id = packet_candidates[0].packet_id if packet_candidates else ""
+                    packet = self.service.tracker.get(packet_id) if packet_id else None
+                else:
+                    if root_span is not None:
+                        root_span.set_attribute("job_rejection.selected_model", "deterministic-fallback")
+                        root_span.set_attribute("job_rejection.adk_fallback_reason", "resource_exhausted")
+                    used_adk = False
+                    result = self.service.diagnose(
+                        resume_path=resume_path,
+                        jd_text=jd_text,
+                        rejection_notes=rejection_notes,
+                        user_id=user_id,
+                        session_id=session_id,
+                        persist=True,
+                    )
+                    packet = result.packet
+                    final_text = render_packet_markdown(result.packet)
+                    if last_model_error is not None and root_span is not None:
+                        root_span.set_attribute("job_rejection.last_model_error", str(last_model_error)[:600])
 
             if root_span is not None and packet is not None:
                 self._record_result_attributes(root_span, packet=packet, output_text=final_text)
