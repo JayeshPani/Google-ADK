@@ -28,10 +28,12 @@ class TracingTests(unittest.TestCase):
         settings = Settings(phoenix_api_key=None)
         self.assertFalse(tracing.configure_tracing(settings))
 
-    def test_registers_phoenix_and_explicitly_instruments_google_adk(self) -> None:
+    def test_registers_phoenix_and_explicitly_instruments_adk_and_mcp(self) -> None:
         register = mock.Mock(return_value="tracer-provider")
-        instrumentor = mock.Mock()
-        instrumentor.is_instrumented_by_opentelemetry = False
+        adk_instrumentor = mock.Mock()
+        adk_instrumentor.is_instrumented_by_opentelemetry = False
+        mcp_instrumentor = mock.Mock()
+        mcp_instrumentor.is_instrumented_by_opentelemetry = False
 
         phoenix_pkg = types.ModuleType("phoenix")
         phoenix_otel = types.ModuleType("phoenix.otel")
@@ -40,7 +42,9 @@ class TracingTests(unittest.TestCase):
         openinference_pkg = types.ModuleType("openinference")
         openinference_instr = types.ModuleType("openinference.instrumentation")
         openinference_google_adk = types.ModuleType("openinference.instrumentation.google_adk")
-        openinference_google_adk.GoogleADKInstrumentor = mock.Mock(return_value=instrumentor)
+        openinference_google_adk.GoogleADKInstrumentor = mock.Mock(return_value=adk_instrumentor)
+        openinference_mcp = types.ModuleType("openinference.instrumentation.mcp")
+        openinference_mcp.MCPInstrumentor = mock.Mock(return_value=mcp_instrumentor)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             settings = Settings(
@@ -57,6 +61,7 @@ class TracingTests(unittest.TestCase):
                     "openinference": openinference_pkg,
                     "openinference.instrumentation": openinference_instr,
                     "openinference.instrumentation.google_adk": openinference_google_adk,
+                    "openinference.instrumentation.mcp": openinference_mcp,
                 },
             ):
                 with mock.patch.dict(os.environ, {}, clear=True):
@@ -72,7 +77,8 @@ class TracingTests(unittest.TestCase):
             project_name="job-rejection-agent",
             auto_instrument=False,
         )
-        instrumentor.instrument.assert_called_once_with(tracer_provider="tracer-provider")
+        adk_instrumentor.instrument.assert_called_once_with(tracer_provider="tracer-provider")
+        mcp_instrumentor.instrument.assert_called_once_with(tracer_provider="tracer-provider")
 
 
 if __name__ == "__main__":

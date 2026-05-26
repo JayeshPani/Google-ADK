@@ -37,6 +37,20 @@ def format_trace_id(trace_id: int) -> str:
     return f"{trace_id:032x}"
 
 
+def _instrument_openinference(tracer_provider: object) -> None:
+    from openinference.instrumentation.google_adk import GoogleADKInstrumentor
+    from openinference.instrumentation.mcp import MCPInstrumentor
+
+    instrumentors = [
+        GoogleADKInstrumentor(),
+        MCPInstrumentor(),
+    ]
+    for instrumentor in instrumentors:
+        if getattr(instrumentor, "is_instrumented_by_opentelemetry", False):
+            continue
+        instrumentor.instrument(tracer_provider=tracer_provider)
+
+
 def configure_tracing(settings: Settings | None = None) -> bool:
     global _TRACING_READY
     if _TRACING_READY:
@@ -46,7 +60,6 @@ def configure_tracing(settings: Settings | None = None) -> bool:
         return False
     try:
         from phoenix.otel import register
-        from openinference.instrumentation.google_adk import GoogleADKInstrumentor
     except ImportError:
         return False
     try:
@@ -54,9 +67,7 @@ def configure_tracing(settings: Settings | None = None) -> bool:
             project_name=settings.phoenix_project_name,
             auto_instrument=False,
         )
-        instrumentor = GoogleADKInstrumentor()
-        if not instrumentor.is_instrumented_by_opentelemetry:
-            instrumentor.instrument(tracer_provider=tracer_provider)
+        _instrument_openinference(tracer_provider)
     except Exception:
         LOGGER.exception("Failed to configure Phoenix/OpenInference tracing.")
         return False
