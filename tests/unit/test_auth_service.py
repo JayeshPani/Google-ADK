@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
@@ -27,6 +28,9 @@ class AuthServiceTests(unittest.TestCase):
         temp_root = Path(self.temp_dir.name)
         self.settings = Settings(
             google_api_key=None,
+            google_oauth_client_id="google-client-id",
+            google_oauth_client_secret="google-client-secret",
+            google_oauth_redirect_uri="http://127.0.0.1:8501/auth/google/callback",
             phoenix_api_key=None,
             local_storage_path=temp_root / "packets.json",
             local_user_storage_path=temp_root / "users.json",
@@ -83,6 +87,99 @@ class AuthServiceTests(unittest.TestCase):
         self.assertIsNotNone(migrated)
         self.assertEqual(migrated.user_id, user.user_id)
         self.assertEqual(self.tracker.list_entries(guest_user_id), [])
+
+    def test_google_oauth_state_round_trip(self) -> None:
+        token = self.auth.create_google_oauth_state_token(next_path="/history", guest_user_id="guest-1")
+        payload = self.auth.verify_google_oauth_state_token(token)
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["next_path"], "/history")
+        self.assertEqual(payload["guest_user_id"], "guest-1")
+
+    def test_google_oauth_links_existing_user(self) -> None:
+        existing = self.auth.register(email="user@example.com", password="password123")
+
+        class FakeResponse:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict[str, str]:
+                return {"id_token": "fake-id-token"}
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, *args, **kwargs):
+                return FakeResponse()
+
+        with (
+            mock.patch("httpx.AsyncClient", return_value=FakeAsyncClient()),
+            mock.patch(
+                "google.oauth2.id_token.verify_oauth2_token",
+                return_value={
+                    "sub": "google-sub-123",
+                    "email": "user@example.com",
+                    "email_verified": True,
+                },
+            ),
+        ):
+            authenticated = self._run_async(
+                self.auth.authenticate_google_code(
+                    code="oauth-code",
+                    redirect_uri=self.settings.google_oauth_redirect_uri or "",
+                )
+            )
+
+        self.assertEqual(authenticated.user_id, existing.user_id)
+        self.assertEqual(authenticated.google_sub, "google-sub-123")
+
+    def test_google_oauth_creates_new_user(self) -> None:
+        class FakeResponse:
+            status_code = 200
+
+            @staticmethod
+            def json() -> dict[str, str]:
+                return {"id_token": "fake-id-token"}
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, *args, **kwargs):
+                return FakeResponse()
+
+        with (
+            mock.patch("httpx.AsyncClient", return_value=FakeAsyncClient()),
+            mock.patch(
+                "google.oauth2.id_token.verify_oauth2_token",
+                return_value={
+                    "sub": "google-sub-456",
+                    "email": "newuser@example.com",
+                    "email_verified": True,
+                },
+            ),
+        ):
+            authenticated = self._run_async(
+                self.auth.authenticate_google_code(
+                    code="oauth-code",
+                    redirect_uri=self.settings.google_oauth_redirect_uri or "",
+                )
+            )
+
+        self.assertEqual(authenticated.email, "newuser@example.com")
+        self.assertEqual(authenticated.google_sub, "google-sub-456")
+
+    def _run_async(self, awaitable):
+        import asyncio
+
+        return asyncio.run(awaitable)
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from app.web_app import COOKIE_NAME, SESSION_COOKIE_NAME, create_app
+from app.web_app import COOKIE_NAME, GOOGLE_STATE_COOKIE_NAME, SESSION_COOKIE_NAME, create_app
 from job_rejection_agent.agents.root_agent import AgentRuntime
 from job_rejection_agent.config import Settings
 
@@ -30,6 +30,9 @@ class WebAppTests(unittest.TestCase):
         temp_root = Path(self.temp_dir.name)
         self.settings = Settings(
             google_api_key=None,
+            google_oauth_client_id="google-client-id",
+            google_oauth_client_secret="google-client-secret",
+            google_oauth_redirect_uri="http://testserver/auth/google/callback",
             phoenix_api_key=None,
             local_storage_path=temp_root / "packets.json",
             local_user_storage_path=temp_root / "users.json",
@@ -65,6 +68,14 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Save every diagnosis to your account.", response.text)
         self.assertIn("Sign In", response.text)
+        self.assertIn("Continue with Google", response.text)
+
+    def test_google_oauth_start_sets_state_cookie_and_redirects(self) -> None:
+        response = self.client.get("/auth/google/start?next_path=/history", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("accounts.google.com", response.headers["location"])
+        self.assertIn(GOOGLE_STATE_COOKIE_NAME, response.headers.get("set-cookie", ""))
 
     def test_diagnose_validation_error_stays_in_branded_ui(self) -> None:
         response = self.client.post(
@@ -173,6 +184,26 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(history.status_code, 200)
         self.assertIn(packet.resume_name, history.text)
         self.assertNotIn("This history belongs to a guest session.", history.text)
+
+    def test_google_oauth_callback_sets_session_cookie(self) -> None:
+        response = self.client.get("/auth/google/start?next_path=/history", follow_redirects=False)
+        state_cookie = self.client.cookies.get(GOOGLE_STATE_COOKIE_NAME)
+        self.assertTrue(state_cookie)
+
+        fake_user = self.app.state.auth_service.register(email="google@example.com", password="password123")
+        with mock.patch.object(
+            self.app.state.auth_service,
+            "authenticate_google_code",
+            new=mock.AsyncMock(return_value=fake_user),
+        ):
+            callback = self.client.get(
+                f"/auth/google/callback?state={state_cookie}&code=fake-code",
+                follow_redirects=False,
+            )
+
+        self.assertEqual(callback.status_code, 303)
+        self.assertEqual(callback.headers["location"], "/history")
+        self.assertIn(SESSION_COOKIE_NAME, callback.headers.get("set-cookie", ""))
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ ROOT = PROJECT_ROOT
 TEMPLATES = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 COOKIE_NAME = "refine_user_id"
 SESSION_COOKIE_NAME = "refine_session"
+GOOGLE_STATE_COOKIE_NAME = "refine_google_oauth_state"
 COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 RESUME_FIXTURES = ROOT / "tests" / "fixtures" / "resumes"
@@ -152,6 +153,25 @@ def _clear_session_cookie(response: HTMLResponse | RedirectResponse) -> None:
     response.delete_cookie(SESSION_COOKIE_NAME)
 
 
+def _set_google_state_cookie(
+    request: Request,
+    response: HTMLResponse | RedirectResponse,
+    state_token: str,
+) -> None:
+    response.set_cookie(
+        GOOGLE_STATE_COOKIE_NAME,
+        state_token,
+        max_age=600,
+        samesite="lax",
+        httponly=True,
+        secure=request.url.scheme == "https",
+    )
+
+
+def _clear_google_state_cookie(response: HTMLResponse | RedirectResponse) -> None:
+    response.delete_cookie(GOOGLE_STATE_COOKIE_NAME)
+
+
 def _sanitize_next_path(next_path: str | None) -> str:
     candidate = (next_path or "").strip()
     if not candidate.startswith("/"):
@@ -159,6 +179,10 @@ def _sanitize_next_path(next_path: str | None) -> str:
     if candidate.startswith("//"):
         return "/history"
     return candidate or "/history"
+
+
+def _google_redirect_uri(request: Request, settings: Settings) -> str:
+    return settings.google_oauth_redirect_uri or str(request.url_for("google_oauth_callback"))
 
 
 def _resolve_demo_case(demo_case_key: str | None) -> dict[str, str] | None:
@@ -427,6 +451,117 @@ def create_app(
     app.state.optimizer = optimizer
     app.state.auth_service = auth_service
 
+    @app.get("/auth/google/start")
+    async def google_oauth_start(
+        request: Request,
+        next_path: str = "/history",
+    ):
+        viewer = _user_identity(request, auth_service)
+        if viewer.authenticated:
+            return RedirectResponse(url=_sanitize_next_path(next_path), status_code=303)
+        if not auth_service.google_oauth_enabled:
+            return RedirectResponse(url="/login?mode=signin", status_code=303)
+
+        sanitized_next = _sanitize_next_path(next_path)
+        state_token = auth_service.create_google_oauth_state_token(
+            next_path=sanitized_next,
+            guest_user_id=viewer.guest_user_id,
+        )
+        authorization_url = auth_service.build_google_oauth_authorize_url(
+            redirect_uri=_google_redirect_uri(request, settings),
+            state_token=state_token,
+        )
+        response = RedirectResponse(url=authorization_url, status_code=303)
+        _set_google_state_cookie(request, response, state_token)
+        if viewer.should_set_guest_cookie:
+            _set_guest_cookie(response, viewer.user_id)
+        return response
+
+    @app.get("/auth/google/callback", name="google_oauth_callback")
+    async def google_oauth_callback(
+        request: Request,
+        code: str = "",
+        state: str = "",
+        error: str = "",
+    ):
+        viewer = _user_identity(request, auth_service)
+        if error:
+            return _render(
+                request,
+                "login.html",
+                viewer=viewer,
+                context={
+                    "active_item": "login",
+                    "auth_mode": "signin",
+                    "next_path": "/history",
+                    "auth_error": f"Google sign-in failed: {error}",
+                    "google_oauth_enabled": auth_service.google_oauth_enabled,
+                },
+            )
+        cookie_state = request.cookies.get(GOOGLE_STATE_COOKIE_NAME)
+        verified_state = auth_service.verify_google_oauth_state_token(cookie_state)
+        if not state or not cookie_state or state != cookie_state or verified_state is None:
+            response = _render(
+                request,
+                "login.html",
+                viewer=viewer,
+                context={
+                    "active_item": "login",
+                    "auth_mode": "signin",
+                    "next_path": "/history",
+                    "auth_error": "Google sign-in state could not be verified. Try again.",
+                    "google_oauth_enabled": auth_service.google_oauth_enabled,
+                },
+            )
+            _clear_google_state_cookie(response)
+            return response
+        if not code:
+            response = _render(
+                request,
+                "login.html",
+                viewer=viewer,
+                context={
+                    "active_item": "login",
+                    "auth_mode": "signin",
+                    "next_path": verified_state.get("next_path", "/history"),
+                    "auth_error": "Google sign-in did not return an authorization code.",
+                    "google_oauth_enabled": auth_service.google_oauth_enabled,
+                },
+            )
+            _clear_google_state_cookie(response)
+            return response
+        try:
+            user = await auth_service.authenticate_google_code(
+                code=code,
+                redirect_uri=_google_redirect_uri(request, settings),
+                guest_user_id=verified_state.get("guest_user_id") or viewer.guest_user_id,
+            )
+        except AuthError as exc:
+            response = _render(
+                request,
+                "login.html",
+                viewer=viewer,
+                context={
+                    "active_item": "login",
+                    "auth_mode": "signin",
+                    "next_path": verified_state.get("next_path", "/history"),
+                    "auth_error": str(exc),
+                    "google_oauth_enabled": auth_service.google_oauth_enabled,
+                },
+            )
+            _clear_google_state_cookie(response)
+            return response
+
+        response = RedirectResponse(url=_sanitize_next_path(verified_state.get("next_path")), status_code=303)
+        _set_session_cookie(
+            request,
+            response,
+            auth_service.create_session_token(user, ttl_seconds=COOKIE_MAX_AGE_SECONDS),
+        )
+        _clear_google_state_cookie(response)
+        _clear_guest_cookie(response)
+        return response
+
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(
         request: Request,
@@ -445,6 +580,7 @@ def create_app(
                 "auth_mode": "signup" if mode == "signup" else "signin",
                 "next_path": _sanitize_next_path(next_path),
                 "auth_error": "",
+                "google_oauth_enabled": auth_service.google_oauth_enabled,
             },
         )
 
@@ -472,6 +608,7 @@ def create_app(
                     "auth_mode": "signin",
                     "next_path": _sanitize_next_path(next_path),
                     "auth_error": str(exc),
+                    "google_oauth_enabled": auth_service.google_oauth_enabled,
                 },
             )
         response = RedirectResponse(url=_sanitize_next_path(next_path), status_code=303)
@@ -507,6 +644,7 @@ def create_app(
                     "auth_mode": "signup",
                     "next_path": _sanitize_next_path(next_path),
                     "auth_error": str(exc),
+                    "google_oauth_enabled": auth_service.google_oauth_enabled,
                 },
             )
         response = RedirectResponse(url=_sanitize_next_path(next_path), status_code=303)

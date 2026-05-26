@@ -31,6 +31,9 @@ class Settings:
     model_fallbacks: tuple[str, ...] = ("gemini-2.5-flash-lite",)
     eval_model_fallbacks: tuple[str, ...] = ("gemini-2.5-flash-lite",)
     google_api_key: str | None = None
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    google_oauth_redirect_uri: str | None = None
     google_cloud_project: str | None = None
     google_cloud_location: str = "us-central1"
     google_genai_use_vertexai: bool = False
@@ -91,6 +94,10 @@ class Settings:
             has_express_key = bool(self.google_api_key and self.google_cloud_location)
             return has_vertex_project or has_express_key
         return bool(self.google_api_key)
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        return bool(self.google_oauth_client_id and self.google_oauth_client_secret)
 
 
 def _read_bool(name: str, default: bool = False) -> bool:
@@ -157,6 +164,9 @@ def get_settings() -> Settings:
             default=("gemini-2.5-flash-lite",),
         ),
         google_api_key=google_api_key or None,
+        google_oauth_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID") or None,
+        google_oauth_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET") or None,
+        google_oauth_redirect_uri=os.getenv("GOOGLE_OAUTH_REDIRECT_URI") or None,
         google_cloud_project=os.getenv("GOOGLE_CLOUD_PROJECT") or None,
         google_cloud_location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
         google_genai_use_vertexai=_read_bool("GOOGLE_GENAI_USE_VERTEXAI", default=False),

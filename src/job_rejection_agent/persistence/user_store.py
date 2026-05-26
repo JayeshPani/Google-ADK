@@ -15,6 +15,7 @@ class UserRepository(Protocol):
     def save_user(self, user: UserAccount) -> UserAccount: ...
     def load_user(self, user_id: str) -> UserAccount | None: ...
     def load_by_email(self, email: str) -> UserAccount | None: ...
+    def load_by_google_sub(self, google_sub: str) -> UserAccount | None: ...
 
 
 @dataclass(slots=True)
@@ -49,6 +50,13 @@ class LocalJsonUserRepository:
                 return UserAccount.from_dict(document)
         return None
 
+    def load_by_google_sub(self, google_sub: str) -> UserAccount | None:
+        payload = self._read_all()
+        for document in payload.values():
+            if document.get("google_sub") == google_sub:
+                return UserAccount.from_dict(document)
+        return None
+
 
 @dataclass(slots=True)
 class FirestoreUserRepository:
@@ -74,6 +82,11 @@ class FirestoreUserRepository:
     def load_by_email(self, email: str) -> UserAccount | None:
         normalized = email.strip().lower()
         query = self._collection().where("email", "==", normalized).limit(1).stream()
+        document = next(iter(query), None)
+        return UserAccount.from_dict(document.to_dict()) if document else None
+
+    def load_by_google_sub(self, google_sub: str) -> UserAccount | None:
+        query = self._collection().where("google_sub", "==", google_sub).limit(1).stream()
         document = next(iter(query), None)
         return UserAccount.from_dict(document.to_dict()) if document else None
 
