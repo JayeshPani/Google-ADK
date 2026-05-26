@@ -34,7 +34,11 @@ class PhoenixTraceSummaryTests(unittest.TestCase):
                 autospec=True,
             ) as connection_params_cls:
                 with mock.patch("mcp.StdioServerParameters", autospec=True) as server_params_cls:
-                    build_phoenix_mcp_toolset(settings)
+                    with mock.patch(
+                        "job_rejection_agent.observability.phoenix_mcp._mcp_command_available",
+                        return_value=True,
+                    ):
+                        build_phoenix_mcp_toolset(settings)
 
         server_params_cls.assert_called_once()
         _, server_kwargs = server_params_cls.call_args
@@ -50,6 +54,20 @@ class PhoenixTraceSummaryTests(unittest.TestCase):
         _, connection_kwargs = connection_params_cls.call_args
         self.assertEqual(connection_kwargs["timeout"], 30.0)
         toolset_cls.assert_called_once()
+
+    def test_build_toolset_returns_none_when_command_missing(self) -> None:
+        settings = Settings(
+            phoenix_api_key="phoenix-key",
+            phoenix_mcp_command="missing-phoenix-mcp",
+            phoenix_project_name="job-rejection-agent",
+        )
+        with mock.patch(
+            "job_rejection_agent.observability.phoenix_mcp._mcp_command_available",
+            return_value=False,
+        ):
+            toolset = build_phoenix_mcp_toolset(settings)
+
+        self.assertIsNone(toolset)
 
     def test_prefers_mcp_trace_query_when_available(self) -> None:
         settings = Settings(phoenix_api_key="phoenix-key", phoenix_project_name="job-rejection-agent")

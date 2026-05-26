@@ -7,11 +7,12 @@ spec:
     metadata:
       annotations:
         autoscaling.knative.dev/minScale: "0"
-        autoscaling.knative.dev/maxScale: "3"
+        autoscaling.knative.dev/maxScale: "2"
         run.googleapis.com/sessionAffinity: "true"
         run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/startup-cpu-boost: "true"
     spec:
-      containerConcurrency: 20
+      containerConcurrency: 4
       timeoutSeconds: 900
       containers:
         - image: us-docker.pkg.dev/PROJECT_ID/job-rejection-agent/job-rejection-agent:latest
@@ -22,10 +23,17 @@ spec:
               value: gemini-2.5-flash
             - name: EVAL_MODEL_ID
               value: gemini-2.5-flash
+            - name: PHOENIX_BASE_URL
+              value: https://app.phoenix.arize.com
             - name: PHOENIX_PROJECT_NAME
               value: job-rejection-agent
+            - name: PHOENIX_MCP_ENABLED
+              value: "true"
+            - name: PHOENIX_MCP_COMMAND
+              value: phoenix-mcp
+            - name: PHOENIX_MCP_ARGS
+              value: --baseUrl,{PHOENIX_COLLECTOR_ENDPOINT},--apiKey,{PHOENIX_API_KEY}
           resources:
             limits:
               cpu: "2"
               memory: 2Gi
-

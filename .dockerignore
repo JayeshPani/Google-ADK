@@ -1,0 +1,13 @@
+.env
+.venv/
+.local/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.superdesign/
+prompt_history/
+tests/
+scripts/
+*.log
+.DS_Store

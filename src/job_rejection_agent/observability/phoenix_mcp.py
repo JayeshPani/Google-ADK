@@ -4,11 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+from pathlib import Path
+import shutil
 from typing import Any, Iterable
 
 from job_rejection_agent.config import Settings, get_settings
 from .tracing import apply_phoenix_environment
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _mcp_command_available(command: str) -> bool:
+    candidate = Path(command)
+    if candidate.is_absolute() or candidate.parent != Path("."):
+        return candidate.exists()
+    return shutil.which(command) is not None
 
 
 def _phoenix_mcp_env(settings: Settings) -> dict[str, str]:
@@ -34,6 +47,9 @@ def _phoenix_mcp_args(settings: Settings) -> list[str]:
 def build_phoenix_mcp_toolset(settings: Settings | None = None):
     settings = settings or get_settings()
     if not settings.phoenix_mcp_enabled or not settings.phoenix_api_key:
+        return None
+    if not _mcp_command_available(settings.phoenix_mcp_command):
+        LOGGER.warning("Phoenix MCP command '%s' is unavailable; ADK MCP tools disabled.", settings.phoenix_mcp_command)
         return None
     try:
         from google.adk.tools.mcp_tool import McpToolset
@@ -233,6 +249,8 @@ async def _query_trace_summaries_via_mcp_async(
     session_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if not settings.phoenix_mcp_enabled:
+        return []
+    if not _mcp_command_available(settings.phoenix_mcp_command):
         return []
     try:
         from mcp.client.session import ClientSession
@@ -469,6 +487,8 @@ async def _query_trace_summary_by_ids_via_mcp_async(
     settings: Settings,
 ) -> dict[str, Any] | None:
     if not settings.phoenix_mcp_enabled:
+        return None
+    if not _mcp_command_available(settings.phoenix_mcp_command):
         return None
     try:
         from mcp.client.session import ClientSession

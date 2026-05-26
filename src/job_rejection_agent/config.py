@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import os
 from functools import lru_cache
 from pathlib import Path
+import shutil
 
 try:
     from dotenv import load_dotenv
@@ -72,15 +73,32 @@ def _read_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _read_mcp_args(raw: str | None, api_key: str | None) -> tuple[str, ...]:
+def _default_mcp_command() -> str:
+    return "phoenix-mcp" if shutil.which("phoenix-mcp") else "npx"
+
+
+def _default_mcp_args(command: str) -> tuple[str, ...]:
+    if command == "phoenix-mcp":
+        return ("--baseUrl", "https://app.phoenix.arize.com")
+    return (
+        "-y",
+        "@arizeai/phoenix-mcp@latest",
+        "--baseUrl",
+        "https://app.phoenix.arize.com",
+    )
+
+
+def _read_mcp_args(
+    raw: str | None,
+    *,
+    command: str,
+    substitutions: dict[str, str | None],
+) -> tuple[str, ...]:
     if not raw:
-        return (
-            "-y",
-            "@arizeai/phoenix-mcp@latest",
-            "--baseUrl",
-            "https://app.phoenix.arize.com",
-        )
-    hydrated = raw.replace("{PHOENIX_API_KEY}", api_key or "")
+        return _default_mcp_args(command)
+    hydrated = raw
+    for key, value in substitutions.items():
+        hydrated = hydrated.replace(f"{{{key}}}", value or "")
     return tuple(part.strip() for part in hydrated.split(",") if part.strip())
 
 
@@ -91,6 +109,9 @@ def get_settings() -> Settings:
     PROMPT_HISTORY_DIR.mkdir(exist_ok=True)
     google_api_key = os.getenv("GOOGLE_API_KEY")
     phoenix_api_key = os.getenv("PHOENIX_API_KEY")
+    phoenix_base_url = os.getenv("PHOENIX_BASE_URL", "https://app.phoenix.arize.com")
+    phoenix_collector_endpoint = os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "https://app.phoenix.arize.com")
+    phoenix_mcp_command = os.getenv("PHOENIX_MCP_COMMAND", _default_mcp_command())
     return Settings(
         model_id=os.getenv("MODEL_ID", "gemini-2.5-flash"),
         eval_model_id=os.getenv("EVAL_MODEL_ID", os.getenv("MODEL_ID", "gemini-2.5-flash")),
@@ -99,12 +120,20 @@ def get_settings() -> Settings:
         google_cloud_location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
         google_genai_use_vertexai=_read_bool("GOOGLE_GENAI_USE_VERTEXAI", default=False),
         phoenix_api_key=phoenix_api_key or None,
-        phoenix_base_url=os.getenv("PHOENIX_BASE_URL", "https://app.phoenix.arize.com"),
-        phoenix_collector_endpoint=os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "https://app.phoenix.arize.com"),
+        phoenix_base_url=phoenix_base_url,
+        phoenix_collector_endpoint=phoenix_collector_endpoint,
         phoenix_project_name=os.getenv("PHOENIX_PROJECT_NAME", "job-rejection-agent"),
         phoenix_mcp_enabled=_read_bool("PHOENIX_MCP_ENABLED", default=True),
-        phoenix_mcp_command=os.getenv("PHOENIX_MCP_COMMAND", "npx"),
-        phoenix_mcp_args=_read_mcp_args(os.getenv("PHOENIX_MCP_ARGS"), phoenix_api_key),
+        phoenix_mcp_command=phoenix_mcp_command,
+        phoenix_mcp_args=_read_mcp_args(
+            os.getenv("PHOENIX_MCP_ARGS"),
+            command=phoenix_mcp_command,
+            substitutions={
+                "PHOENIX_API_KEY": phoenix_api_key,
+                "PHOENIX_BASE_URL": phoenix_base_url,
+                "PHOENIX_COLLECTOR_ENDPOINT": phoenix_collector_endpoint,
+            },
+        ),
         firestore_project_id=os.getenv("FIRESTORE_PROJECT_ID") or None,
         firestore_collection=os.getenv("FIRESTORE_COLLECTION", "job_packets"),
         session_db_url=os.getenv("SESSION_DB_URL", "sqlite+aiosqlite:///./.local/adk_sessions.db"),
