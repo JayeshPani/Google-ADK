@@ -1,0 +1,56 @@
+[
+  {
+    "name": "ml_platform_student",
+    "resume_path": "tests/fixtures/resumes/nisha_ml_newgrad.txt",
+    "jd_path": "tests/fixtures/jds/ml_platform_engineer.md",
+    "rejection_notes": "Recruiter said the profile felt promising but not yet production-ready.",
+    "required_references": [
+      "Campus Mentor Bot",
+      "Interview Debrief Summarizer",
+      "docker"
+    ],
+    "required_sections": [
+      "Match Score",
+      "Top rejection drivers",
+      "Exact edits",
+      "One-week action plan",
+      "Interview prep"
+    ]
+  },
+  {
+    "name": "backend_newgrad_fit",
+    "resume_path": "tests/fixtures/resumes/arjun_backend_student.txt",
+    "jd_path": "tests/fixtures/jds/backend_newgrad.md",
+    "rejection_notes": "We liked the project work but wanted more evidence of API ownership.",
+    "required_references": [
+      "Expense Split Service",
+      "Course Registration Engine",
+      "REST API"
+    ],
+    "required_sections": [
+      "Match Score",
+      "Top rejection drivers",
+      "Exact edits",
+      "One-week action plan",
+      "Interview prep"
+    ]
+  },
+  {
+    "name": "ai_product_intern_gap",
+    "resume_path": "tests/fixtures/resumes/rahul_fullstack_intern.txt",
+    "jd_path": "tests/fixtures/jds/ai_products_intern.md",
+    "rejection_notes": "The recruiter wanted stronger evidence of LLM experimentation and user-feedback loops.",
+    "required_references": [
+      "HackHub",
+      "Voice Notes Board",
+      "Streamlit"
+    ],
+    "required_sections": [
+      "Match Score",
+      "Top rejection drivers",
+      "Exact edits",
+      "One-week action plan",
+      "Interview prep"
+    ]
+  }
+]

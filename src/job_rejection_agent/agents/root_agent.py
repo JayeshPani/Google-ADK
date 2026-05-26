@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import nullcontext
+import hashlib
 from pathlib import Path
 from typing import Any
 import uuid
@@ -89,10 +90,10 @@ class AgentRuntime:
         except Exception:
             return False
 
-    def build_agent(self):
+    def build_agent(self, *, prompt_text_override: str | None = None):
         from google.adk.agents import LlmAgent
 
-        prompt = Path(self.settings.prompt_path).read_text(encoding="utf-8")
+        prompt = prompt_text_override or Path(self.settings.prompt_path).read_text(encoding="utf-8")
         instruction = prompt.rstrip() + "\n\nSpecialist guidance:\n" + compose_specialist_context()
         return LlmAgent(
             model=self.settings.model_id,
@@ -111,6 +112,7 @@ class AgentRuntime:
         resume_path: str,
         jd_text: str,
         rejection_notes: str,
+        prompt_text_override: str | None = None,
     ) -> None:
         span.set_attribute("session.id", session_id)
         span.set_attribute("user.id", user_id)
@@ -119,6 +121,12 @@ class AgentRuntime:
         span.set_attribute("job_rejection.resume_name", Path(resume_path).name)
         span.set_attribute("job_rejection.jd_length", len(jd_text))
         span.set_attribute("job_rejection.has_rejection_notes", bool(rejection_notes.strip()))
+        span.set_attribute("job_rejection.prompt_source", "override" if prompt_text_override else "default")
+        if prompt_text_override:
+            span.set_attribute(
+                "job_rejection.prompt_fingerprint",
+                hashlib.sha256(prompt_text_override.encode("utf-8")).hexdigest()[:16],
+            )
 
     def _record_result_attributes(self, span: Any, *, packet: Any, output_text: str) -> None:
         span.set_attribute("job_rejection.packet_id", packet.packet_id)
@@ -139,6 +147,7 @@ class AgentRuntime:
         jd_text: str,
         rejection_notes: str = "",
         user_id: str = "anonymous",
+        prompt_text_override: str | None = None,
     ) -> dict[str, Any]:
         session_id = str(uuid.uuid4())
         root_span_id = None
@@ -163,6 +172,7 @@ class AgentRuntime:
                     resume_path=resume_path,
                     jd_text=jd_text,
                     rejection_notes=rejection_notes,
+                    prompt_text_override=prompt_text_override,
                 )
                 span_context = root_span.get_span_context()
                 root_span_id = format_span_id(span_context.span_id)
@@ -194,7 +204,7 @@ class AgentRuntime:
                 )
                 runner = Runner(
                     app_name=self.settings.app_name,
-                    agent=self.build_agent(),
+                    agent=self.build_agent(prompt_text_override=prompt_text_override),
                     session_service=session_service,
                 )
                 user_message = types.Content(
@@ -225,7 +235,12 @@ class AgentRuntime:
             if root_span is not None and packet is not None:
                 self._record_result_attributes(root_span, packet=packet, output_text=final_text)
 
-        eval_scores = evaluate_packet(packet, span_id=root_span_id, settings=self.settings) if packet else {}
+        eval_scores = evaluate_packet(
+            packet,
+            span_id=root_span_id,
+            output_text=final_text,
+            settings=self.settings,
+        ) if packet else {}
         return {
             "used_adk": used_adk,
             "session_id": packet.session_id if packet else session_id,

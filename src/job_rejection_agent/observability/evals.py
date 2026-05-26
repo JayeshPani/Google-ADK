@@ -99,6 +99,7 @@ def evaluate_packet(
     packet: SavedJobPacket,
     *,
     span_id: str | None = None,
+    output_text: str | None = None,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     settings = settings or get_settings()
@@ -116,8 +117,8 @@ def evaluate_packet(
     except Exception:
         return heuristic
 
-    markdown = packet.report.to_markdown()
-    df = pd.DataFrame([{"output": markdown, "span_id": span_id or packet.session_id}])
+    coaching_output = output_text or packet.report.to_markdown()
+    df = pd.DataFrame([{"output": coaching_output, "span_id": span_id or packet.session_id}])
     llm = LLM(provider="google", model=settings.eval_model_id)
     evaluators = [
         ClassificationEvaluator(

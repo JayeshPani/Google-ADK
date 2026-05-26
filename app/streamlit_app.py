@@ -387,7 +387,7 @@ def main() -> None:
                     st.markdown(render_packet_markdown(saved_packet))
         with right:
             st.markdown("### Prompt improvement loop")
-            st.caption("Draft a candidate prompt from observed traces and held-out eval cases.")
+            st.caption("Draft a candidate prompt from observed traces, then promote it only if live held-out ADK runs improve without regressions.")
             if st.button("Generate candidate prompt", use_container_width=True):
                 candidate_prompt, improvement_run = optimizer.optimize()
                 st.session_state["candidate_prompt"] = candidate_prompt
@@ -403,6 +403,12 @@ def main() -> None:
                     </div>
                     """,
                     unsafe_allow_html=True,
+                )
+                st.json(
+                    {
+                        "baseline_scores": improvement_run.baseline_scores,
+                        "candidate_scores": improvement_run.candidate_scores,
+                    }
                 )
                 st.text_area("Candidate prompt preview", st.session_state.get("candidate_prompt", ""), height=260)
 
