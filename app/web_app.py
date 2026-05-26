@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -23,12 +24,13 @@ from job_rejection_agent.config import Settings, get_settings
 from job_rejection_agent.domain import ImprovementRun, RewritePatch, SavedJobPacket, TrackerEntry
 from job_rejection_agent.ingestion import parse_resume_file
 from job_rejection_agent.observability import PromptOptimizer
-from job_rejection_agent.services import render_packet_markdown
+from job_rejection_agent.services import AuthError, AuthService, render_packet_markdown
 
 
 ROOT = PROJECT_ROOT
 TEMPLATES = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 COOKIE_NAME = "refine_user_id"
+SESSION_COOKIE_NAME = "refine_session"
 COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 RESUME_FIXTURES = ROOT / "tests" / "fixtures" / "resumes"
@@ -60,6 +62,16 @@ PATCH_SECTION_ORDER = ("summary", "experience", "project", "skills", "education"
 RESUME_PREVIEW_MAX_CHARS = 2200
 
 
+@dataclass(slots=True)
+class ViewerContext:
+    user_id: str
+    label: str
+    authenticated: bool
+    email: str | None
+    guest_user_id: str | None
+    should_set_guest_cookie: bool
+
+
 def _decision_meta(decision: str) -> dict[str, str]:
     mapping = {
         "apply_now": {"label": "Apply Now", "badge_class": "badge-apply-now", "tone_class": "text-emerald-700"},
@@ -70,11 +82,36 @@ def _decision_meta(decision: str) -> dict[str, str]:
     return mapping.get(decision, mapping["defer"])
 
 
-def _user_identity(request: Request) -> tuple[str, bool]:
-    user_id = request.cookies.get(COOKIE_NAME)
-    if user_id:
-        return user_id, False
-    return f"guest-{uuid.uuid4().hex[:10]}", True
+def _user_identity(request: Request, auth_service: AuthService) -> ViewerContext:
+    guest_user_id = request.cookies.get(COOKIE_NAME)
+    auth_session = auth_service.verify_session_token(request.cookies.get(SESSION_COOKIE_NAME))
+    if auth_session:
+        return ViewerContext(
+            user_id=auth_session.user_id,
+            label=auth_session.email,
+            authenticated=True,
+            email=auth_session.email,
+            guest_user_id=guest_user_id,
+            should_set_guest_cookie=False,
+        )
+    if guest_user_id:
+        return ViewerContext(
+            user_id=guest_user_id,
+            label=_user_label(guest_user_id),
+            authenticated=False,
+            email=None,
+            guest_user_id=guest_user_id,
+            should_set_guest_cookie=False,
+        )
+    new_guest_user_id = f"guest-{uuid.uuid4().hex[:10]}"
+    return ViewerContext(
+        user_id=new_guest_user_id,
+        label=_user_label(new_guest_user_id),
+        authenticated=False,
+        email=None,
+        guest_user_id=new_guest_user_id,
+        should_set_guest_cookie=True,
+    )
 
 
 def _user_label(user_id: str) -> str:
@@ -82,16 +119,46 @@ def _user_label(user_id: str) -> str:
     return f"Guest {suffix}"
 
 
-def _apply_user_cookie(response: HTMLResponse | RedirectResponse, user_id: str, should_set_cookie: bool) -> None:
-    if not should_set_cookie:
-        return
+def _set_guest_cookie(response: HTMLResponse | RedirectResponse, user_id: str) -> None:
     response.set_cookie(
         COOKIE_NAME,
         user_id,
         max_age=COOKIE_MAX_AGE_SECONDS,
         samesite="lax",
-        httponly=False,
+        httponly=True,
     )
+
+
+def _clear_guest_cookie(response: HTMLResponse | RedirectResponse) -> None:
+    response.delete_cookie(COOKIE_NAME)
+
+
+def _set_session_cookie(
+    request: Request,
+    response: HTMLResponse | RedirectResponse,
+    session_token: str,
+) -> None:
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        session_token,
+        max_age=COOKIE_MAX_AGE_SECONDS,
+        samesite="lax",
+        httponly=True,
+        secure=request.url.scheme == "https",
+    )
+
+
+def _clear_session_cookie(response: HTMLResponse | RedirectResponse) -> None:
+    response.delete_cookie(SESSION_COOKIE_NAME)
+
+
+def _sanitize_next_path(next_path: str | None) -> str:
+    candidate = (next_path or "").strip()
+    if not candidate.startswith("/"):
+        return "/history"
+    if candidate.startswith("//"):
+        return "/history"
+    return candidate or "/history"
 
 
 def _resolve_demo_case(demo_case_key: str | None) -> dict[str, str] | None:
@@ -308,8 +375,7 @@ def _render(
     request: Request,
     template_name: str,
     *,
-    user_id: str,
-    set_cookie: bool,
+    viewer: ViewerContext,
     context: dict[str, Any],
 ) -> HTMLResponse:
     response = TEMPLATES.TemplateResponse(
@@ -317,13 +383,16 @@ def _render(
         name=template_name,
         context={
             "request": request,
-            "user_id": user_id,
-            "user_label": _user_label(user_id),
+            "user_id": viewer.user_id,
+            "user_label": viewer.label,
+            "user_authenticated": viewer.authenticated,
+            "user_email": viewer.email,
             "demo_cases": DEMO_CASES,
             **context,
         },
     )
-    _apply_user_cookie(response, user_id, set_cookie)
+    if viewer.should_set_guest_cookie:
+        _set_guest_cookie(response, viewer.user_id)
     return response
 
 
@@ -351,10 +420,110 @@ def create_app(
     settings = settings or get_settings()
     runtime = runtime or AgentRuntime(settings=settings)
     optimizer = optimizer or PromptOptimizer(settings=settings)
+    auth_service = AuthService(settings=settings, tracker=runtime.service.tracker)
     app = FastAPI(title="Refine")
     app.state.settings = settings
     app.state.runtime = runtime
     app.state.optimizer = optimizer
+    app.state.auth_service = auth_service
+
+    @app.get("/login", response_class=HTMLResponse)
+    async def login_page(
+        request: Request,
+        next_path: str = "/history",
+        mode: str = "signin",
+    ) -> HTMLResponse:
+        viewer = _user_identity(request, auth_service)
+        if viewer.authenticated:
+            return RedirectResponse(url=_sanitize_next_path(next_path), status_code=303)
+        return _render(
+            request,
+            "login.html",
+            viewer=viewer,
+            context={
+                "active_item": "login",
+                "auth_mode": "signup" if mode == "signup" else "signin",
+                "next_path": _sanitize_next_path(next_path),
+                "auth_error": "",
+            },
+        )
+
+    @app.post("/login")
+    async def login_submit(
+        request: Request,
+        email: str = Form(""),
+        password: str = Form(""),
+        next_path: str = Form("/history"),
+    ):
+        viewer = _user_identity(request, auth_service)
+        try:
+            user = auth_service.authenticate(
+                email=email,
+                password=password,
+                guest_user_id=viewer.guest_user_id if not viewer.authenticated else None,
+            )
+        except AuthError as exc:
+            return _render(
+                request,
+                "login.html",
+                viewer=viewer,
+                context={
+                    "active_item": "login",
+                    "auth_mode": "signin",
+                    "next_path": _sanitize_next_path(next_path),
+                    "auth_error": str(exc),
+                },
+            )
+        response = RedirectResponse(url=_sanitize_next_path(next_path), status_code=303)
+        _set_session_cookie(
+            request,
+            response,
+            auth_service.create_session_token(user, ttl_seconds=COOKIE_MAX_AGE_SECONDS),
+        )
+        _clear_guest_cookie(response)
+        return response
+
+    @app.post("/signup")
+    async def signup_submit(
+        request: Request,
+        email: str = Form(""),
+        password: str = Form(""),
+        next_path: str = Form("/history"),
+    ):
+        viewer = _user_identity(request, auth_service)
+        try:
+            user = auth_service.register(
+                email=email,
+                password=password,
+                guest_user_id=viewer.guest_user_id if not viewer.authenticated else None,
+            )
+        except AuthError as exc:
+            return _render(
+                request,
+                "login.html",
+                viewer=viewer,
+                context={
+                    "active_item": "login",
+                    "auth_mode": "signup",
+                    "next_path": _sanitize_next_path(next_path),
+                    "auth_error": str(exc),
+                },
+            )
+        response = RedirectResponse(url=_sanitize_next_path(next_path), status_code=303)
+        _set_session_cookie(
+            request,
+            response,
+            auth_service.create_session_token(user, ttl_seconds=COOKIE_MAX_AGE_SECONDS),
+        )
+        _clear_guest_cookie(response)
+        return response
+
+    @app.post("/logout")
+    async def logout_submit(request: Request):
+        response = RedirectResponse(url="/", status_code=303)
+        _clear_session_cookie(response)
+        _clear_guest_cookie(response)
+        return response
 
     @app.get("/", response_class=HTMLResponse)
     async def diagnose_page(
@@ -362,13 +531,12 @@ def create_app(
         packet_id: str = "",
         demo_case: str = "",
     ) -> HTMLResponse:
-        user_id, set_cookie = _user_identity(request)
-        packet = _get_user_packet(runtime, user_id, packet_id)
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         return _render(
             request,
             "diagnose.html",
-            user_id=user_id,
-            set_cookie=set_cookie,
+            viewer=viewer,
             context=_diagnose_context(runtime, packet=packet, demo_case=demo_case),
         )
 
@@ -380,7 +548,7 @@ def create_app(
         demo_case: str = Form(""),
         resume: UploadFile | None = File(default=None),
     ):
-        user_id, set_cookie = _user_identity(request)
+        viewer = _user_identity(request, auth_service)
         temp_path: Path | None = None
         resume_path: Path | None = None
         resume_preview: dict[str, Any] | None = None
@@ -402,8 +570,7 @@ def create_app(
                     return _render(
                         request,
                         "diagnose.html",
-                        user_id=user_id,
-                        set_cookie=set_cookie,
+                        viewer=viewer,
                         context=_diagnose_context(
                             runtime,
                             packet=None,
@@ -422,8 +589,7 @@ def create_app(
                 return _render(
                     request,
                     "diagnose.html",
-                    user_id=user_id,
-                    set_cookie=set_cookie,
+                    viewer=viewer,
                     context=_diagnose_context(
                         runtime,
                         packet=None,
@@ -438,8 +604,7 @@ def create_app(
                 return _render(
                     request,
                     "diagnose.html",
-                    user_id=user_id,
-                    set_cookie=set_cookie,
+                    viewer=viewer,
                     context=_diagnose_context(
                         runtime,
                         packet=None,
@@ -457,7 +622,7 @@ def create_app(
                     resume_path=str(resume_path),
                     jd_text=effective_jd,
                     rejection_notes=rejection_notes,
-                    user_id=user_id,
+                    user_id=viewer.user_id,
                 )
                 if resume_hint and result.get("packet") is not None:
                     result["packet"].resume_name = resume_hint
@@ -466,8 +631,7 @@ def create_app(
                 return _render(
                     request,
                     "diagnose.html",
-                    user_id=user_id,
-                    set_cookie=set_cookie,
+                    viewer=viewer,
                     context=_diagnose_context(
                         runtime,
                         packet=None,
@@ -484,19 +648,19 @@ def create_app(
                 temp_path.unlink(missing_ok=True)
 
         response = RedirectResponse(url=f"/?packet_id={result['packet_id']}", status_code=303)
-        _apply_user_cookie(response, user_id, set_cookie)
+        if viewer.should_set_guest_cookie:
+            _set_guest_cookie(response, viewer.user_id)
         return response
 
     @app.get("/patch/{packet_id}", response_class=HTMLResponse)
     async def patch_page(request: Request, packet_id: str) -> HTMLResponse:
-        user_id, set_cookie = _user_identity(request)
-        packet = _get_user_packet(runtime, user_id, packet_id)
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None:
             return _render(
                 request,
                 "diagnose.html",
-                user_id=user_id,
-                set_cookie=set_cookie,
+                viewer=viewer,
                 context=_diagnose_context(
                     runtime,
                     packet=None,
@@ -507,8 +671,7 @@ def create_app(
         return _render(
             request,
             "patch.html",
-            user_id=user_id,
-            set_cookie=set_cookie,
+            viewer=viewer,
             context={
                 "active_item": "diagnose",
                 "packet": packet,
@@ -520,8 +683,8 @@ def create_app(
 
     @app.get("/patch/{packet_id}/download")
     async def download_patch(request: Request, packet_id: str) -> PlainTextResponse:
-        user_id, _ = _user_identity(request)
-        packet = _get_user_packet(runtime, user_id, packet_id)
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None:
             return PlainTextResponse("Packet not found.", status_code=404)
         filename = f"refine-patch-{packet.packet_id[:8]}.txt"
@@ -532,14 +695,13 @@ def create_app(
 
     @app.get("/plan/{packet_id}", response_class=HTMLResponse)
     async def plan_page(request: Request, packet_id: str) -> HTMLResponse:
-        user_id, set_cookie = _user_identity(request)
-        packet = _get_user_packet(runtime, user_id, packet_id)
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None:
             return _render(
                 request,
                 "diagnose.html",
-                user_id=user_id,
-                set_cookie=set_cookie,
+                viewer=viewer,
                 context=_diagnose_context(
                     runtime,
                     packet=None,
@@ -549,8 +711,7 @@ def create_app(
         return _render(
             request,
             "plan.html",
-            user_id=user_id,
-            set_cookie=set_cookie,
+            viewer=viewer,
             context={
                 "active_item": "diagnose",
                 "packet": packet,
@@ -568,20 +729,19 @@ def create_app(
         status: str = "all",
         sort: str = "newest",
     ) -> HTMLResponse:
-        user_id, set_cookie = _user_identity(request)
-        entries = _history_entries(runtime.service.tracker.list_entries(user_id), status_filter=status, sort_order=sort)
-        selected_packet = _get_user_packet(runtime, user_id, packet_id)
+        viewer = _user_identity(request, auth_service)
+        entries = _history_entries(runtime.service.tracker.list_entries(viewer.user_id), status_filter=status, sort_order=sort)
+        selected_packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if selected_packet is None and entries:
-            selected_packet = _get_user_packet(runtime, user_id, entries[0].packet_id)
+            selected_packet = _get_user_packet(runtime, viewer.user_id, entries[0].packet_id)
         entry_packets = {
-            entry.packet_id: _get_user_packet(runtime, user_id, entry.packet_id)
+            entry.packet_id: _get_user_packet(runtime, viewer.user_id, entry.packet_id)
             for entry in entries
         }
         return _render(
             request,
             "history.html",
-            user_id=user_id,
-            set_cookie=set_cookie,
+            viewer=viewer,
             context={
                 "active_item": "history",
                 "entries": entries,
@@ -591,17 +751,17 @@ def create_app(
                 "entry_packets": entry_packets,
                 "decision_meta": _decision_meta,
                 "company_initials": _company_initials,
+                "history_persistent": viewer.authenticated,
             },
         )
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request) -> HTMLResponse:
-        user_id, set_cookie = _user_identity(request)
+        viewer = _user_identity(request, auth_service)
         return _render(
             request,
             "settings.html",
-            user_id=user_id,
-            set_cookie=set_cookie,
+            viewer=viewer,
             context={
                 "active_item": "settings",
                 "improvement_run": None,
@@ -617,7 +777,7 @@ def create_app(
 
     @app.post("/settings/improve", response_class=HTMLResponse)
     async def run_improvement(request: Request) -> HTMLResponse:
-        user_id, set_cookie = _user_identity(request)
+        viewer = _user_identity(request, auth_service)
         candidate_prompt = ""
         improvement_run: ImprovementRun | None = None
         try:
@@ -636,8 +796,7 @@ def create_app(
         return _render(
             request,
             "settings.html",
-            user_id=user_id,
-            set_cookie=set_cookie,
+            viewer=viewer,
             context={
                 "active_item": "settings",
                 "improvement_run": improvement_run,

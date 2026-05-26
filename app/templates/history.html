@@ -36,6 +36,18 @@
     </form>
   </header>
 
+  {% if not history_persistent %}
+  <div class="mb-8 rounded-[24px] border border-amber-200 bg-amber-50 px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <p class="text-sm font-semibold text-amber-900">This history belongs to a guest session.</p>
+      <p class="text-sm text-amber-800">Sign in to keep these packets across browser resets and deploy restarts.</p>
+    </div>
+    <a href="/login?next_path=/history" class="px-5 py-3 rounded-2xl bg-[#6B8E83] text-white font-semibold text-sm hover:bg-[#5A7A70] transition-colors">
+      Sign In to Save
+    </a>
+  </div>
+  {% endif %}
+
   <section class="space-y-6">
     {% for entry in entries %}
     {% set meta = decision_meta(entry.status) %}

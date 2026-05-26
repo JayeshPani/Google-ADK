@@ -1,5 +1,6 @@
 """Typed domain contracts."""
 
+from .auth import UserAccount
 from .schemas import (
     DiagnosticReport,
     EvidenceGap,
@@ -22,5 +23,5 @@ __all__ = [
     "RewritePatch",
     "SavedJobPacket",
     "TrackerEntry",
+    "UserAccount",
 ]
-

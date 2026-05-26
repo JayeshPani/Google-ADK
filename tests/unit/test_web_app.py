@@ -16,7 +16,7 @@ if str(ROOT) not in sys.path:
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from app.web_app import COOKIE_NAME, create_app
+from app.web_app import COOKIE_NAME, SESSION_COOKIE_NAME, create_app
 from job_rejection_agent.agents.root_agent import AgentRuntime
 from job_rejection_agent.config import Settings
 
@@ -32,7 +32,9 @@ class WebAppTests(unittest.TestCase):
             google_api_key=None,
             phoenix_api_key=None,
             local_storage_path=temp_root / "packets.json",
+            local_user_storage_path=temp_root / "users.json",
             session_db_url=f"sqlite+aiosqlite:///{temp_root / 'sessions.db'}",
+            app_secret_key="test-secret",
         )
         self.runtime = AgentRuntime(settings=self.settings)
         self.optimizer = types.SimpleNamespace(optimize=lambda: ("", None))
@@ -56,6 +58,13 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Diagnose the gap.", response.text)
         self.assertIn("Run Diagnosis", response.text)
+
+    def test_login_page_renders(self) -> None:
+        response = self.client.get("/login")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Save every diagnosis to your account.", response.text)
+        self.assertIn("Sign In", response.text)
 
     def test_diagnose_validation_error_stays_in_branded_ui(self) -> None:
         response = self.client.post(
@@ -133,6 +142,37 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Saved Analyses", response.text)
         self.assertIn(packet.resume_name, response.text)
+
+    def test_signup_migrates_guest_history_and_sets_session_cookie(self) -> None:
+        packet = self.runtime.service.diagnose(
+            resume_path=self._resume_fixture(),
+            jd_text=self._jd_fixture_text(),
+            user_id=self.user_id,
+            session_id="session-3",
+            persist=True,
+        ).packet
+
+        response = self.client.post(
+            "/signup",
+            data={"email": "jayesh@example.com", "password": "supersecure123", "next_path": "/history"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/history")
+        self.assertIn(SESSION_COOKIE_NAME, response.headers.get("set-cookie", ""))
+
+        user = self.app.state.auth_service.user_repository.load_by_email("jayesh@example.com")
+        self.assertIsNotNone(user)
+        self.assertEqual(self.runtime.service.tracker.list_entries(self.user_id), [])
+        migrated = self.runtime.service.tracker.get(packet.packet_id)
+        self.assertIsNotNone(migrated)
+        self.assertEqual(migrated.user_id, user.user_id)
+
+        history = self.client.get("/history")
+        self.assertEqual(history.status_code, 200)
+        self.assertIn(packet.resume_name, history.text)
+        self.assertNotIn("This history belongs to a guest session.", history.text)
 
 
 if __name__ == "__main__":

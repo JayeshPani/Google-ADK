@@ -48,12 +48,15 @@ class Settings:
     )
     firestore_project_id: str | None = None
     firestore_collection: str = "job_packets"
+    firestore_user_collection: str = "users"
     session_db_url: str = "sqlite+aiosqlite:///./.local/adk_sessions.db"
     local_storage_path: Path = LOCAL_DIR / "job_packets.json"
+    local_user_storage_path: Path = LOCAL_DIR / "users.json"
     prompt_version: str = "baseline-v1"
     prompt_path: Path = PROMPTS_DIR / "coaching_system_prompt.txt"
     prompt_candidate_path: Path = PROMPTS_DIR / "coaching_system_prompt_candidate.txt"
     prompt_history_dir: Path = PROMPT_HISTORY_DIR
+    app_secret_key: str = "local-dev-secret"
 
     @property
     def phoenix_headers(self) -> dict[str, str]:
@@ -174,7 +177,15 @@ def get_settings() -> Settings:
         ),
         firestore_project_id=os.getenv("FIRESTORE_PROJECT_ID") or None,
         firestore_collection=os.getenv("FIRESTORE_COLLECTION", "job_packets"),
+        firestore_user_collection=os.getenv("FIRESTORE_USER_COLLECTION", "users"),
         session_db_url=os.getenv("SESSION_DB_URL", "sqlite+aiosqlite:///./.local/adk_sessions.db"),
         local_storage_path=Path(os.getenv("LOCAL_STORAGE_PATH", ".local/job_packets.json")),
+        local_user_storage_path=Path(os.getenv("LOCAL_USER_STORAGE_PATH", ".local/users.json")),
         prompt_version=os.getenv("PROMPT_VERSION", "baseline-v1"),
+        app_secret_key=(
+            os.getenv("APP_SECRET_KEY")
+            or phoenix_api_key
+            or google_api_key
+            or "local-dev-secret"
+        ),
     )

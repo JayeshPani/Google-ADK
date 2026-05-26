@@ -38,3 +38,13 @@ class JobTracker:
             )
             for packet in self.repository.list_packets(user_id)
         ]
+
+    def reassign_packets(self, from_user_id: str, to_user_id: str) -> int:
+        if not from_user_id or from_user_id == to_user_id:
+            return 0
+        moved = 0
+        for packet in self.repository.list_packets(from_user_id):
+            packet.user_id = to_user_id
+            self.repository.save_packet(packet)
+            moved += 1
+        return moved
