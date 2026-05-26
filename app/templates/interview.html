@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Interview Simulator | Refine{% endblock %}
+
+{% block content %}
+<main class="flex-1 w-full max-w-6xl mx-auto px-6 py-12 md:py-20">
+  <div class="space-y-10">
+    <nav class="flex items-center gap-2 text-sm text-gray-400">
+      <a href="/?packet_id={{ packet.packet_id }}" class="hover:text-[#6B8E83] transition-colors">Analysis</a>
+      <iconify-icon icon="lucide:chevron-right"></iconify-icon>
+      <span class="text-gray-900 font-medium">Interview Simulator</span>
+    </nav>
+
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div class="space-y-2">
+        <h1 class="text-4xl md:text-5xl font-medium">Interactive Interview Simulator</h1>
+        <p class="text-lg text-gray-500">Practice answers for <span class="text-gray-900 font-medium italic">{{ packet.job_requirements.role_title }}</span> at <span class="text-gray-900 font-medium">{{ packet.job_requirements.company_name }}</span></p>
+      </div>
+      <form method="post" action="/interview/{{ packet.packet_id }}/start">
+        <button type="submit" class="px-6 py-3 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+          <iconify-icon icon="lucide:play-circle"></iconify-icon> Start New Session
+        </button>
+      </form>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-8">
+      <aside class="space-y-6">
+        <div class="bg-white rounded-[28px] border border-[#EBE9E4] p-6 space-y-4">
+          <h3 class="text-xl font-medium">Session Overview</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="rounded-2xl bg-[#F9F8F6] p-4">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Average</p>
+              <p class="text-2xl font-semibold mt-1">{{ "%.1f"|format(session_overview.average or 0) }}/10</p>
+            </div>
+            <div class="rounded-2xl bg-[#F9F8F6] p-4">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Evidence</p>
+              <p class="text-2xl font-semibold mt-1">{{ "%.1f"|format(session_overview.evidence or 0) }}/10</p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-500">Weak evidence skill to keep addressing: <span class="font-semibold text-gray-700">{{ session_overview.weak_skill or "project impact" }}</span></p>
+        </div>
+        <div class="bg-white rounded-[28px] border border-[#EBE9E4] p-6 space-y-4">
+          <h3 class="text-xl font-medium">Saved Sessions</h3>
+          {% for item in packet.interview_sessions|reverse %}
+          <a href="/interview/{{ packet.packet_id }}?session_id={{ item.session_id }}" class="block rounded-2xl border border-[#EBE9E4] p-4 hover:border-[#6B8E83] transition-colors">
+            <p class="text-sm font-semibold">{{ "Completed" if item.status == "completed" else "In Progress" }}</p>
+            <p class="text-xs text-gray-400 mt-1">{{ item.updated_at[:16].replace('T', ' ') }}</p>
+          </a>
+          {% else %}
+          <p class="text-sm text-gray-500">No interview session saved yet.</p>
+          {% endfor %}
+        </div>
+      </aside>
+
+      <section class="space-y-6">
+        {% if session %}
+        <div class="bg-white rounded-[32px] border border-[#EBE9E4] p-8 space-y-6">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">{{ session.status.replace('_', ' ') }}</p>
+              <h2 class="text-2xl font-medium mt-2">Session {{ session.session_id[:8] }}</h2>
+            </div>
+            <p class="text-sm text-gray-400">{{ session.turns|length }} / {{ session.questions|length }} answered</p>
+          </div>
+
+          {% if session.status == "in_progress" %}
+          <div class="rounded-[28px] bg-[#F9F8F6] border border-[#EBE9E4] p-6 space-y-4">
+            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Current Prompt</p>
+            <p class="text-xl font-medium leading-relaxed">{{ current_question }}</p>
+          </div>
+          <form method="post" action="/interview/{{ packet.packet_id }}/answer" class="space-y-4">
+            <input type="hidden" name="session_id" value="{{ session.session_id }}">
+            <textarea name="answer" required placeholder="Answer using real evidence from your resume. Mention a project, a responsibility, and a verified outcome if possible." class="w-full h-48 px-4 py-4 rounded-2xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm resize-none"></textarea>
+            <button type="submit" class="px-6 py-3 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-xl font-semibold transition-all">Score This Answer</button>
+          </form>
+          {% else %}
+          <div class="rounded-[28px] bg-emerald-50 border border-emerald-100 p-6">
+            <p class="text-sm font-semibold text-emerald-900">Session complete</p>
+            <p class="text-sm text-emerald-800 mt-2">{{ session.final_summary }}</p>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="space-y-4">
+          <h3 class="text-2xl font-medium">Transcript and Feedback</h3>
+          {% for turn in session.turns %}
+          <div class="bg-white rounded-[28px] border border-[#EBE9E4] p-6 space-y-5">
+            <div>
+              <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Question {{ loop.index }}</p>
+              <p class="text-lg font-medium mt-2">{{ turn.question }}</p>
+            </div>
+            <div class="rounded-2xl bg-[#F9F8F6] p-5">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Your Answer</p>
+              <p class="text-sm text-gray-700 mt-3 leading-7">{{ turn.answer }}</p>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div class="rounded-2xl border border-[#EBE9E4] p-4">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Overall</p>
+                <p class="text-xl font-semibold mt-1">{{ "%.1f"|format(turn.feedback.overall_score) }}</p>
+              </div>
+              <div class="rounded-2xl border border-[#EBE9E4] p-4">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Evidence</p>
+                <p class="text-xl font-semibold mt-1">{{ "%.1f"|format(turn.feedback.evidence_score) }}</p>
+              </div>
+              <div class="rounded-2xl border border-[#EBE9E4] p-4">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Clarity</p>
+                <p class="text-xl font-semibold mt-1">{{ "%.1f"|format(turn.feedback.clarity_score) }}</p>
+              </div>
+              <div class="rounded-2xl border border-[#EBE9E4] p-4">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Relevance</p>
+                <p class="text-xl font-semibold mt-1">{{ "%.1f"|format(turn.feedback.relevance_score) }}</p>
+              </div>
+              <div class="rounded-2xl border border-[#EBE9E4] p-4">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Gap Coverage</p>
+                <p class="text-xl font-semibold mt-1">{{ "%.1f"|format(turn.feedback.gap_score) }}</p>
+              </div>
+            </div>
+            <div class="rounded-2xl bg-amber-50 border border-amber-100 p-5 space-y-3">
+              <p class="text-sm font-semibold text-amber-900">Coach Feedback</p>
+              <p class="text-sm text-amber-900/90">{{ turn.feedback.feedback }}</p>
+              {% if turn.feedback.suggested_evidence %}
+              <div class="space-y-2">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-amber-700">Suggested evidence to mention next time</p>
+                {% for evidence in turn.feedback.suggested_evidence %}
+                <p class="text-xs text-amber-900">{{ evidence }}</p>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="bg-white rounded-[32px] border border-[#EBE9E4] p-10 text-center space-y-4">
+          <h2 class="text-3xl font-medium">No interview session yet</h2>
+          <p class="text-gray-500">Start a practice session to turn the diagnosis into stronger spoken evidence.</p>
+        </div>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+</main>
+{% endblock %}

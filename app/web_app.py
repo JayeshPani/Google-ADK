@@ -11,7 +11,7 @@ import sys
 import uuid
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -20,11 +20,19 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from job_rejection_agent.agents import AgentRuntime
+from job_rejection_agent.coaching import session_overview
 from job_rejection_agent.config import Settings, get_settings
-from job_rejection_agent.domain import RewritePatch, SavedJobPacket, TrackerEntry
+from job_rejection_agent.domain import (
+    InterviewSimulationSession,
+    MultiJDComparison,
+    RewritePatch,
+    SavedJobPacket,
+    TrackerEntry,
+)
 from job_rejection_agent.ingestion import parse_resume_file
 from job_rejection_agent.observability import PromptOptimizer
 from job_rejection_agent.services import AuthError, AuthService, render_packet_markdown
+from job_rejection_agent.services.resume_export import build_resume_docx_bytes, build_resume_pdf_bytes
 
 
 ROOT = PROJECT_ROOT
@@ -435,6 +443,40 @@ def _download_text(packet: SavedJobPacket) -> str:
     return "\n".join(lines)
 
 
+def _interview_session_lookup(packet: SavedJobPacket, session_id: str = "") -> InterviewSimulationSession | None:
+    if session_id:
+        for session in packet.interview_sessions:
+            if session.session_id == session_id:
+                return session
+    return packet.interview_sessions[-1] if packet.interview_sessions else None
+
+
+def _sorted_comparison_rows(comparison: MultiJDComparison, sort_key: str = "overall") -> list[dict[str, Any]]:
+    key_map = {
+        "overall": "score_overall",
+        "ats": "score_ats",
+        "evidence": "score_evidence",
+        "level_fit": "score_level_fit",
+    }
+    attribute = key_map.get(sort_key, "score_overall")
+    rows = sorted(comparison.rows, key=lambda item: getattr(item, attribute), reverse=True)
+    return [
+        {
+            "packet_id": row.packet_id,
+            "role_title": row.role_title,
+            "company_name": row.company_name,
+            "score_overall": row.score_overall,
+            "score_ats": row.score_ats,
+            "score_evidence": row.score_evidence,
+            "score_level_fit": row.score_level_fit,
+            "recommended_decision": row.recommended_decision,
+            "top_gap_title": row.top_gap_title,
+            "decision_meta": _decision_meta(row.recommended_decision),
+        }
+        for row in rows
+    ]
+
+
 def create_app(
     *,
     settings: Settings | None = None,
@@ -838,6 +880,59 @@ def create_app(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    @app.get("/resume/{packet_id}", response_class=HTMLResponse)
+    async def rewritten_resume_page(request: Request, packet_id: str) -> HTMLResponse:
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
+        if packet is None or packet.report.rewritten_resume is None:
+            return _render(
+                request,
+                "diagnose.html",
+                viewer=viewer,
+                context=_diagnose_context(
+                    runtime,
+                    packet=None,
+                    error_message="The rewritten resume is not available for this packet.",
+                ),
+            )
+        return _render(
+            request,
+            "resume.html",
+            viewer=viewer,
+            context={
+                "active_item": "diagnose",
+                "packet": packet,
+                "packet_meta": _decision_meta(packet.report.recommended_decision),
+                "rewritten_resume": packet.report.rewritten_resume,
+            },
+        )
+
+    @app.get("/resume/{packet_id}/export.docx")
+    async def rewritten_resume_docx(request: Request, packet_id: str) -> Response:
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
+        if packet is None or packet.report.rewritten_resume is None:
+            return Response("Packet not found.", status_code=404)
+        filename = f"refine-resume-{packet.packet_id[:8]}.docx"
+        return Response(
+            content=build_resume_docx_bytes(packet.report.rewritten_resume),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/resume/{packet_id}/export.pdf")
+    async def rewritten_resume_pdf(request: Request, packet_id: str) -> Response:
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
+        if packet is None or packet.report.rewritten_resume is None:
+            return Response("Packet not found.", status_code=404)
+        filename = f"refine-resume-{packet.packet_id[:8]}.pdf"
+        return Response(
+            content=build_resume_pdf_bytes(packet.report.rewritten_resume),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     @app.get("/plan/{packet_id}", response_class=HTMLResponse)
     async def plan_page(request: Request, packet_id: str) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
@@ -864,6 +959,163 @@ def create_app(
                 "plan_cards": _action_plan_cards(packet),
                 "learning_cards": _learning_cards(packet),
                 "interview_columns": _interview_columns(packet),
+            },
+        )
+
+    @app.get("/interview/{packet_id}", response_class=HTMLResponse)
+    async def interview_page(request: Request, packet_id: str, session_id: str = "") -> HTMLResponse:
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
+        if packet is None:
+            return _render(
+                request,
+                "diagnose.html",
+                viewer=viewer,
+                context=_diagnose_context(
+                    runtime,
+                    packet=None,
+                    error_message="That interview simulator packet is not available for this session.",
+                ),
+            )
+        session = _interview_session_lookup(packet, session_id)
+        current_question = ""
+        if session is not None and session.status == "in_progress":
+            current_question = session.questions[session.current_index]
+        return _render(
+            request,
+            "interview.html",
+            viewer=viewer,
+            context={
+                "active_item": "diagnose",
+                "packet": packet,
+                "packet_meta": _decision_meta(packet.report.recommended_decision),
+                "session": session,
+                "session_overview": session_overview(packet.report, session),
+                "current_question": current_question,
+            },
+        )
+
+    @app.post("/interview/{packet_id}/start")
+    async def interview_start(request: Request, packet_id: str):
+        viewer = _user_identity(request, auth_service)
+        result = runtime.service.create_interview_session(packet_id=packet_id, user_id=viewer.user_id)
+        if result is None:
+            return RedirectResponse(url=f"/interview/{packet_id}", status_code=303)
+        _, session = result
+        return RedirectResponse(url=f"/interview/{packet_id}?session_id={session.session_id}", status_code=303)
+
+    @app.post("/interview/{packet_id}/answer")
+    async def interview_answer(
+        request: Request,
+        packet_id: str,
+        session_id: str = Form(""),
+        answer: str = Form(""),
+    ):
+        viewer = _user_identity(request, auth_service)
+        if not answer.strip():
+            return RedirectResponse(url=f"/interview/{packet_id}?session_id={session_id}", status_code=303)
+        result = runtime.service.submit_interview_answer(
+            packet_id=packet_id,
+            session_id=session_id,
+            user_id=viewer.user_id,
+            answer=answer,
+        )
+        if result is None:
+            return RedirectResponse(url=f"/interview/{packet_id}", status_code=303)
+        _, session = result
+        return RedirectResponse(url=f"/interview/{packet_id}?session_id={session.session_id}", status_code=303)
+
+    @app.get("/compare", response_class=HTMLResponse)
+    async def compare_page(request: Request) -> HTMLResponse:
+        viewer = _user_identity(request, auth_service)
+        return _render(
+            request,
+            "compare.html",
+            viewer=viewer,
+            context={
+                "active_item": "compare",
+                "error_message": "",
+                "form_state": {"rejection_notes": "", "jd_texts": ["", "", "", "", ""]},
+            },
+        )
+
+    @app.post("/compare")
+    async def run_comparison(
+        request: Request,
+        rejection_notes: str = Form(""),
+        jd_1: str = Form(""),
+        jd_2: str = Form(""),
+        jd_3: str = Form(""),
+        jd_4: str = Form(""),
+        jd_5: str = Form(""),
+        resume: UploadFile | None = File(default=None),
+    ):
+        viewer = _user_identity(request, auth_service)
+        jd_texts = [jd_1, jd_2, jd_3, jd_4, jd_5]
+        if resume is None or not resume.filename:
+            return _render(
+                request,
+                "compare.html",
+                viewer=viewer,
+                context={
+                    "active_item": "compare",
+                    "error_message": "Upload one resume before running a multi-JD comparison.",
+                    "form_state": {"rejection_notes": rejection_notes, "jd_texts": jd_texts},
+                },
+            )
+        non_empty = [item for item in jd_texts if item.strip()]
+        if len(non_empty) < 2:
+            return _render(
+                request,
+                "compare.html",
+                viewer=viewer,
+                context={
+                    "active_item": "compare",
+                    "error_message": "Paste at least two job descriptions to compare fit across roles.",
+                    "form_state": {"rejection_notes": rejection_notes, "jd_texts": jd_texts},
+                },
+            )
+        temp_path: Path | None = None
+        try:
+            suffix = Path(resume.filename).suffix or ".txt"
+            with NamedTemporaryFile(delete=False, suffix=suffix) as handle:
+                handle.write(await resume.read())
+                temp_path = Path(handle.name)
+            comparison = runtime.service.compare_job_descriptions(
+                resume_path=str(temp_path),
+                jd_texts=non_empty,
+                rejection_notes=rejection_notes,
+                user_id=viewer.user_id,
+            )
+        finally:
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink(missing_ok=True)
+        return RedirectResponse(url=f"/compare/{comparison.comparison_id}", status_code=303)
+
+    @app.get("/compare/{comparison_id}", response_class=HTMLResponse)
+    async def comparison_results_page(request: Request, comparison_id: str, sort: str = "overall") -> HTMLResponse:
+        viewer = _user_identity(request, auth_service)
+        comparison = runtime.service.tracker.get_comparison(comparison_id)
+        if comparison is None or comparison.user_id != viewer.user_id:
+            return _render(
+                request,
+                "compare.html",
+                viewer=viewer,
+                context={
+                    "active_item": "compare",
+                    "error_message": "That comparison bundle could not be found for this session.",
+                    "form_state": {"rejection_notes": "", "jd_texts": ["", "", "", "", ""]},
+                },
+            )
+        return _render(
+            request,
+            "compare_results.html",
+            viewer=viewer,
+            context={
+                "active_item": "compare",
+                "comparison": comparison,
+                "rows": _sorted_comparison_rows(comparison, sort),
+                "sort_order": sort,
             },
         )
 

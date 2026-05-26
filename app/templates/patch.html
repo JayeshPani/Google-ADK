@@ -34,7 +34,10 @@
           <iconify-icon icon="lucide:copy"></iconify-icon> Copy All Edits
         </button>
         <a href="/patch/{{ packet.packet_id }}/download" class="px-6 py-3 bg-white border border-[#EBE9E4] text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-all flex items-center gap-2">
-          <iconify-icon icon="lucide:download"></iconify-icon> Export Patch Notes
+          <iconify-icon icon="lucide:download"></iconify-icon> Export Patch Notes (.txt)
+        </a>
+        <a href="/resume/{{ packet.packet_id }}" class="px-6 py-3 bg-white border border-[#EBE9E4] text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-all flex items-center gap-2">
+          <iconify-icon icon="lucide:file-text"></iconify-icon> Open Rewritten Resume
         </a>
       </div>
     </div>
@@ -147,4 +150,3 @@
   }
 </script>
 {% endblock %}
-

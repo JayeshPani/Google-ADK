@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from job_rejection_agent.domain import SavedJobPacket, TrackerEntry
+from job_rejection_agent.domain import MultiJDComparison, SavedJobPacket, TrackerEntry
 
 from .firestore import PacketRepository
 
@@ -18,6 +18,15 @@ class JobTracker:
 
     def get(self, packet_id: str) -> SavedJobPacket | None:
         return self.repository.load_packet(packet_id)
+
+    def save_comparison(self, comparison: MultiJDComparison) -> MultiJDComparison:
+        return self.repository.save_comparison(comparison)
+
+    def get_comparison(self, comparison_id: str) -> MultiJDComparison | None:
+        return self.repository.load_comparison(comparison_id)
+
+    def list_comparisons(self, user_id: str) -> list[MultiJDComparison]:
+        return self.repository.list_comparisons(user_id)
 
     def find_by_session(self, user_id: str, session_id: str) -> SavedJobPacket | None:
         for packet in self.repository.list_packets(user_id):

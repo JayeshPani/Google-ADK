@@ -18,17 +18,20 @@ SECTION_PATTERN = re.compile(
 METRIC_PATTERN = re.compile(r"\b\d+(?:\.\d+)?%|\b\d+(?:,\d{3})*(?:\+)?\b")
 
 
-def _split_sections(text: str) -> dict[str, str]:
+def _split_sections(text: str) -> tuple[dict[str, str], list[str]]:
     matches = list(SECTION_PATTERN.finditer(text))
     if not matches:
-        return {"full_text": text}
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        return {"full_text": text}, lines[:4]
     sections: dict[str, str] = {}
+    header_text = text[:matches[0].start()].strip()
     for index, match in enumerate(matches):
         start = match.end()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         title = match.group(1).strip().lower()
         sections[title] = text[start:end].strip()
-    return sections
+    header_lines = [line.strip() for line in header_text.splitlines() if line.strip()]
+    return sections, header_lines[:4]
 
 
 def _extract_skills(text: str) -> list[str]:
@@ -96,7 +99,7 @@ def _collect_evidence(text: str, skills: list[str]) -> dict[str, list[str]]:
 
 
 def extract_resume_facts(parsed_resume: ParsedResume) -> ResumeFacts:
-    sections = _split_sections(parsed_resume.normalized_text)
+    sections, header_lines = _split_sections(parsed_resume.normalized_text)
     skills = _extract_skills(parsed_resume.normalized_text)
     projects = _extract_projects(sections.get("projects", ""), parsed_resume.normalized_text)
     experience_section = sections.get("experience", "")
@@ -118,5 +121,10 @@ def extract_resume_facts(parsed_resume: ParsedResume) -> ResumeFacts:
         evidence_by_skill=evidence,
         ats_findings=parsed_resume.ats_findings,
         contact_signals=parsed_resume.contact_signals,
+        header_lines=header_lines,
+        section_map={
+            name: [line.strip(" -*•") for line in value.splitlines() if line.strip()]
+            for name, value in sections.items()
+        },
+        source_file_type=parsed_resume.file_type,
     )
-

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Compare Job Fits | Refine{% endblock %}
+
+{% block content %}
+<main class="flex-1 w-full max-w-6xl mx-auto px-6 py-12 md:py-20">
+  <section class="space-y-10">
+    <div class="text-center space-y-4">
+      <h1 class="text-4xl md:text-5xl font-medium">Compare One Resume Across Multiple Roles</h1>
+      <p class="text-lg text-gray-500 max-w-3xl mx-auto">Upload one resume, paste up to five job descriptions, and rank which roles are worth applying to now versus after patching.</p>
+    </div>
+
+    <form action="/compare" method="post" enctype="multipart/form-data" class="bg-white rounded-[32px] border border-[#EBE9E4] shadow-sm overflow-hidden p-8 md:p-12">
+      <div class="space-y-8">
+        {% if error_message %}
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800">
+          <p class="font-semibold">Comparison did not run.</p>
+          <p class="mt-1">{{ error_message }}</p>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div class="space-y-4">
+            <label class="block text-xs font-bold uppercase tracking-widest text-gray-400">Resume</label>
+            <label class="relative group border-2 border-dashed border-[#EBE9E4] rounded-2xl p-8 transition-all hover:border-[#6B8E83] hover:bg-[#F0F4F2]/30 cursor-pointer text-center block">
+              <input type="file" name="resume" class="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf,.docx,.txt,.md">
+              <iconify-icon icon="lucide:upload-cloud" class="text-4xl text-gray-300 group-hover:text-[#6B8E83] mb-4 transition-colors"></iconify-icon>
+              <p class="text-sm text-gray-600"><span class="font-semibold">Upload Resume</span> once for all comparisons</p>
+              <p class="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD</p>
+            </label>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Global Rejection Notes (Optional)</label>
+              <textarea name="rejection_notes" placeholder="Anything recruiters repeatedly told you across these applications..." class="w-full h-32 px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm resize-none">{{ form_state.rejection_notes }}</textarea>
+            </div>
+          </div>
+
+          <div class="space-y-5">
+            <label class="block text-xs font-bold uppercase tracking-widest text-gray-400">Job Descriptions</label>
+            {% for jd in form_state.jd_texts %}
+            <textarea name="jd_{{ loop.index }}" placeholder="Paste job description {{ loop.index }}..." class="w-full h-28 px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm resize-none">{{ jd }}</textarea>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="pt-4 border-t border-[#F5F3F0] flex items-center justify-end">
+          <button type="submit" class="px-10 py-4 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 transition-all transform active:scale-[0.98]">Run Comparison</button>
+        </div>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

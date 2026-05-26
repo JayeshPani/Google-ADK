@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
@@ -14,9 +15,20 @@ from job_rejection_agent.coaching import (
     generate_action_plan,
     generate_interview_questions,
     generate_rewrite_package,
+    generate_rewritten_resume,
+    start_interview_session,
+    submit_interview_answer,
 )
 from job_rejection_agent.config import Settings, get_settings
-from job_rejection_agent.domain import DiagnosticReport, JobRequirements, ResumeFacts, SavedJobPacket
+from job_rejection_agent.domain import (
+    DiagnosticReport,
+    InterviewSimulationSession,
+    JobRequirements,
+    MultiJDComparison,
+    MultiJDRow,
+    ResumeFacts,
+    SavedJobPacket,
+)
 from job_rejection_agent.google_models import build_google_genai_client, is_resource_exhausted_error
 from job_rejection_agent.ingestion import parse_job_description, parse_rejection_notes, parse_resume_file
 from job_rejection_agent.persistence import JobTracker, build_packet_repository
@@ -28,6 +40,10 @@ class DiagnosticSessionResult:
     report_markdown: str
     eval_scores: dict[str, Any] = field(default_factory=dict)
     used_llm_augmentation: bool = False
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 class GeminiAugmenter:
@@ -169,6 +185,9 @@ Resume:
             evidence_by_skill=resume_facts.evidence_by_skill,
             ats_findings=resume_facts.ats_findings,
             contact_signals=resume_facts.contact_signals,
+            header_lines=resume_facts.header_lines,
+            section_map=resume_facts.section_map,
+            source_file_type=resume_facts.source_file_type,
         )
 
     def refine_job_requirements(self, requirements: JobRequirements, jd_text: str) -> JobRequirements:
@@ -243,8 +262,10 @@ class DiagnosticService:
             missing_skills=bundle.missing_skills,
             under_evidenced_skills=bundle.under_evidenced_skills,
             ats_findings=bundle.ats_findings,
+            ats_checks=bundle.ats_checks,
             top_gaps=bundle.top_gaps,
             exact_edits=[],
+            rewritten_resume=None,
             project_reframes=[],
             action_plan=[],
             interview_questions=[],
@@ -253,7 +274,7 @@ class DiagnosticService:
             narrative_summary=bundle.narrative_summary,
         )
         rewrite_package = generate_rewrite_package(resume_facts, requirements, draft_report)
-        report = DiagnosticReport(
+        report_without_resume = DiagnosticReport(
             score_overall=bundle.score_overall,
             score_ats=bundle.score_ats,
             score_evidence=bundle.score_evidence,
@@ -262,14 +283,42 @@ class DiagnosticService:
             missing_skills=bundle.missing_skills,
             under_evidenced_skills=bundle.under_evidenced_skills,
             ats_findings=bundle.ats_findings,
+            ats_checks=bundle.ats_checks,
             top_gaps=bundle.top_gaps,
             exact_edits=rewrite_package.exact_edits,
+            rewritten_resume=None,
             project_reframes=rewrite_package.project_reframes,
             action_plan=generate_action_plan(draft_report, resume_facts, requirements, rejection_signals),
             interview_questions=generate_interview_questions(draft_report, resume_facts, requirements),
             provenance=bundle.provenance,
             recommended_decision=bundle.recommended_decision,
             narrative_summary=bundle.narrative_summary,
+        )
+        rewritten_resume = generate_rewritten_resume(
+            resume_facts,
+            requirements,
+            report_without_resume,
+            rewrite_package,
+        )
+        report = DiagnosticReport(
+            score_overall=report_without_resume.score_overall,
+            score_ats=report_without_resume.score_ats,
+            score_evidence=report_without_resume.score_evidence,
+            score_level_fit=report_without_resume.score_level_fit,
+            matched_skills=report_without_resume.matched_skills,
+            missing_skills=report_without_resume.missing_skills,
+            under_evidenced_skills=report_without_resume.under_evidenced_skills,
+            ats_findings=report_without_resume.ats_findings,
+            ats_checks=report_without_resume.ats_checks,
+            top_gaps=report_without_resume.top_gaps,
+            exact_edits=report_without_resume.exact_edits,
+            rewritten_resume=rewritten_resume,
+            project_reframes=report_without_resume.project_reframes,
+            action_plan=report_without_resume.action_plan,
+            interview_questions=report_without_resume.interview_questions,
+            provenance=report_without_resume.provenance,
+            recommended_decision=report_without_resume.recommended_decision,
+            narrative_summary=report_without_resume.narrative_summary,
         )
         packet = SavedJobPacket.new(
             user_id=user_id,
@@ -287,3 +336,78 @@ class DiagnosticService:
             report_markdown=report.to_markdown(),
             used_llm_augmentation=used_llm,
         )
+
+    def create_interview_session(self, *, packet_id: str, user_id: str) -> tuple[SavedJobPacket, InterviewSimulationSession] | None:
+        packet = self.tracker.get(packet_id)
+        if packet is None or packet.user_id != user_id:
+            return None
+        session = start_interview_session(packet)
+        packet.interview_sessions.append(session)
+        packet.updated_at = _utc_now_iso()
+        self.tracker.save(packet)
+        return packet, session
+
+    def submit_interview_answer(
+        self,
+        *,
+        packet_id: str,
+        session_id: str,
+        user_id: str,
+        answer: str,
+    ) -> tuple[SavedJobPacket, InterviewSimulationSession] | None:
+        packet = self.tracker.get(packet_id)
+        if packet is None or packet.user_id != user_id:
+            return None
+        for index, session in enumerate(packet.interview_sessions):
+            if session.session_id != session_id:
+                continue
+            updated = submit_interview_answer(packet, session, answer)
+            updated.updated_at = _utc_now_iso()
+            packet.interview_sessions[index] = updated
+            packet.updated_at = _utc_now_iso()
+            self.tracker.save(packet)
+            return packet, updated
+        return None
+
+    def compare_job_descriptions(
+        self,
+        *,
+        resume_path: str | Path,
+        jd_texts: list[str],
+        rejection_notes: str = "",
+        user_id: str = "anonymous",
+    ) -> MultiJDComparison:
+        rows: list[MultiJDRow] = []
+        packets: list[SavedJobPacket] = []
+        for jd_text in [item.strip() for item in jd_texts if item.strip()][:5]:
+            result = self.diagnose(
+                resume_path=resume_path,
+                jd_text=jd_text,
+                rejection_notes=rejection_notes,
+                user_id=user_id,
+                session_id=str(uuid.uuid4()),
+                persist=True,
+            )
+            packet = result.packet
+            packets.append(packet)
+            rows.append(
+                MultiJDRow(
+                    packet_id=packet.packet_id,
+                    role_title=packet.job_requirements.role_title,
+                    company_name=packet.job_requirements.company_name,
+                    score_overall=packet.report.score_overall,
+                    score_ats=packet.report.score_ats,
+                    score_evidence=packet.report.score_evidence,
+                    score_level_fit=packet.report.score_level_fit,
+                    recommended_decision=packet.report.recommended_decision,
+                    top_gap_title=packet.report.top_gaps[0].title if packet.report.top_gaps else "No major gap detected",
+                )
+            )
+        rows.sort(key=lambda item: item.score_overall, reverse=True)
+        comparison = MultiJDComparison(
+            comparison_id=str(uuid.uuid4()),
+            user_id=user_id,
+            resume_name=packets[0].resume_name if packets else Path(resume_path).name,
+            rows=rows,
+        )
+        return self.tracker.save_comparison(comparison)

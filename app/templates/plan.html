@@ -108,6 +108,12 @@
     </div>
     <div class="flex flex-col md:flex-row items-center justify-center gap-4">
       <a href="/patch/{{ packet.packet_id }}" class="w-full md:w-auto px-10 py-4 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 transition-all transform active:scale-[0.98]">Patch Details</a>
+      <a href="/resume/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+        <iconify-icon icon="lucide:file-pen-line"></iconify-icon> Rewritten Resume
+      </a>
+      <a href="/interview/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+        <iconify-icon icon="lucide:mic"></iconify-icon> Interview Simulator
+      </a>
       <a href="/history?packet_id={{ packet.packet_id }}" class="w-full md:w-auto px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
         <iconify-icon icon="lucide:bookmark"></iconify-icon> Save Roadmap
       </a>
@@ -116,4 +122,3 @@
   </section>
 </main>
 {% endblock %}
-

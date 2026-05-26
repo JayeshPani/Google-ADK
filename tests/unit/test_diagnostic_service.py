@@ -31,6 +31,50 @@ class DiagnosticServiceTests(unittest.TestCase):
         self.assertGreater(len(result.packet.report.exact_edits), 0)
         self.assertGreaterEqual(len(result.packet.report.action_plan), 5)
         self.assertIn(result.packet.report.recommended_decision, {"apply_now", "apply_after_patch", "defer", "not_fit"})
+        self.assertTrue(result.packet.report.ats_checks)
+        self.assertIsNotNone(result.packet.report.rewritten_resume)
+        self.assertIn("Skills", result.packet.report.rewritten_resume.skills.title)
+
+    def test_interview_session_flow_is_persisted_in_packet(self) -> None:
+        service = DiagnosticService()
+        packet = service.diagnose(
+            resume_path=ROOT / "fixtures" / "resumes" / "arjun_backend_student.txt",
+            jd_text=(ROOT / "fixtures" / "jds" / "backend_newgrad.md").read_text(encoding="utf-8"),
+            user_id="user-1",
+            session_id="session-a",
+            persist=True,
+        ).packet
+
+        created = service.create_interview_session(packet_id=packet.packet_id, user_id="user-1")
+        self.assertIsNotNone(created)
+        _, session = created
+        self.assertEqual(session.status, "in_progress")
+
+        updated = service.submit_interview_answer(
+            packet_id=packet.packet_id,
+            session_id=session.session_id,
+            user_id="user-1",
+            answer="I built a FastAPI backend for CampusCart and improved checkout latency by 28% for real users.",
+        )
+        self.assertIsNotNone(updated)
+        packet_after, updated_session = updated
+        self.assertEqual(len(updated_session.turns), 1)
+        self.assertGreater(updated_session.turns[0].feedback.overall_score, 0)
+        self.assertEqual(packet_after.interview_sessions[0].session_id, session.session_id)
+
+    def test_compare_job_descriptions_creates_ranked_bundle(self) -> None:
+        service = DiagnosticService()
+        comparison = service.compare_job_descriptions(
+            resume_path=ROOT / "fixtures" / "resumes" / "rahul_fullstack_intern.txt",
+            jd_texts=[
+                (ROOT / "fixtures" / "jds" / "ai_products_intern.md").read_text(encoding="utf-8"),
+                (ROOT / "fixtures" / "jds" / "backend_newgrad.md").read_text(encoding="utf-8"),
+            ],
+            user_id="compare-user",
+        )
+
+        self.assertEqual(len(comparison.rows), 2)
+        self.assertGreaterEqual(comparison.rows[0].score_overall, comparison.rows[1].score_overall)
 
     def test_gemini_resume_augmentation_handles_dict_payloads(self) -> None:
         augmenter = GeminiAugmenter(Settings())

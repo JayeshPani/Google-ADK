@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from job_rejection_agent.domain import EvidenceGap, JobRequirements, ProvenanceNote, ResumeFacts
+from job_rejection_agent.domain import ATSCheckResult, EvidenceGap, JobRequirements, ProvenanceNote, ResumeFacts
 from job_rejection_agent.ingestion.rejection_notes import RejectionSignals
 
+from .ats_checker import evaluate_ats_checks
 from .evidence_mapper import build_gap_inventory
 from .level_fit import assess_level_fit
 
@@ -21,17 +22,19 @@ class ScoreBundle:
     missing_skills: list[str]
     under_evidenced_skills: list[str]
     ats_findings: list[str]
+    ats_checks: list[ATSCheckResult]
     top_gaps: list[EvidenceGap]
     provenance: list[ProvenanceNote]
     recommended_decision: str
     narrative_summary: str
 
 
-def _score_ats(resume_facts: ResumeFacts, requirements: JobRequirements) -> float:
+def _score_ats(ats_checks: list[ATSCheckResult]) -> float:
     score = 10.0
-    score -= min(len(resume_facts.ats_findings), 4) * 1.2
-    if requirements.ats_checks:
-        score -= 0.4
+    fail_count = sum(1 for item in ats_checks if item.status == "fail")
+    warn_count = sum(1 for item in ats_checks if item.status == "warn")
+    score -= min(fail_count * 2.0, 5.0)
+    score -= min(warn_count * 0.8, 3.2)
     return round(max(3.0, score), 1)
 
 
@@ -60,10 +63,12 @@ def score_resume_match(
     requirements: JobRequirements,
     rejection_signals: RejectionSignals,
 ) -> ScoreBundle:
+    ats_checks = evaluate_ats_checks(resume_facts, requirements)
     matched_skills, missing_skills, under_evidenced_skills, gaps, provenance = build_gap_inventory(
         resume_facts,
         requirements,
         rejection_signals,
+        ats_checks=ats_checks,
     )
     level_assessment = assess_level_fit(resume_facts, requirements)
     if level_assessment.gap:
@@ -75,7 +80,7 @@ def score_resume_match(
                 source="heuristic",
             )
         )
-    score_ats = _score_ats(resume_facts, requirements)
+    score_ats = _score_ats(ats_checks)
     score_evidence = _score_evidence(
         matched_skills,
         missing_skills,
@@ -98,7 +103,8 @@ def score_resume_match(
         matched_skills=matched_skills,
         missing_skills=missing_skills,
         under_evidenced_skills=under_evidenced_skills,
-        ats_findings=resume_facts.ats_findings,
+        ats_findings=[item.details for item in ats_checks if item.status != "pass"],
+        ats_checks=ats_checks,
         top_gaps=gaps[:6],
         provenance=provenance[:8],
         recommended_decision=decision,

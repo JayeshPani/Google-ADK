@@ -27,6 +27,8 @@ class EndToEndDiagnosticTests(unittest.TestCase):
         self.assertTrue(result.report_markdown.startswith("## Match Score"))
         self.assertGreater(result.packet.report.score_overall, 0)
         self.assertEqual(result.packet.job_requirements.role_title, "Backend Software Engineer, New Grad")
+        self.assertTrue(result.packet.report.ats_checks)
+        self.assertIsNotNone(result.packet.report.rewritten_resume)
 
 
 if __name__ == "__main__":

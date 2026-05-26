@@ -178,6 +178,79 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("Saved Analyses", response.text)
         self.assertIn(packet.resume_name, response.text)
 
+    def test_rewritten_resume_page_and_exports_render(self) -> None:
+        packet = self.runtime.service.diagnose(
+            resume_path=self._resume_fixture(),
+            jd_text=self._jd_fixture_text(),
+            user_id=self.user_id,
+            session_id="session-resume",
+            persist=True,
+        ).packet
+
+        page = self.client.get(f"/resume/{packet.packet_id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Evidence-Backed Resume Draft", page.text)
+
+        docx_response = self.client.get(f"/resume/{packet.packet_id}/export.docx")
+        self.assertEqual(docx_response.status_code, 200)
+        self.assertEqual(
+            docx_response.headers["content-type"],
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+
+        pdf_response = self.client.get(f"/resume/{packet.packet_id}/export.pdf")
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response.headers["content-type"], "application/pdf")
+
+    def test_interview_flow_start_and_answer(self) -> None:
+        packet = self.runtime.service.diagnose(
+            resume_path=self._resume_fixture(),
+            jd_text=self._jd_fixture_text(),
+            user_id=self.user_id,
+            session_id="session-interview",
+            persist=True,
+        ).packet
+
+        start = self.client.post(f"/interview/{packet.packet_id}/start", follow_redirects=False)
+        self.assertEqual(start.status_code, 303)
+        self.assertIn("/interview/", start.headers["location"])
+        session_id = start.headers["location"].split("session_id=")[-1]
+
+        answer = self.client.post(
+            f"/interview/{packet.packet_id}/answer",
+            data={
+                "session_id": session_id,
+                "answer": "I built backend APIs for a student project and improved response time by 25% using FastAPI.",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(answer.status_code, 303)
+
+        page = self.client.get(answer.headers["location"])
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Transcript and Feedback", page.text)
+        self.assertIn("Coach Feedback", page.text)
+
+    def test_compare_flow_creates_comparison_results(self) -> None:
+        response = self.client.post(
+            "/compare",
+            data={
+                "rejection_notes": "Need stronger user-facing evidence.",
+                "jd_1": self._jd_fixture_text(),
+                "jd_2": (FIXTURE_ROOT / "jds" / "ai_products_intern.md").read_text(encoding="utf-8"),
+            },
+            files={"resume": ("arjun_backend_student.txt", self._resume_fixture().read_bytes(), "text/plain")},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("/compare/", response.headers["location"])
+
+        page = self.client.get(response.headers["location"])
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Multi-JD Comparison", page.text)
+        self.assertIn("Open Analysis", page.text)
+
     def test_signup_migrates_guest_history_and_sets_session_cookie(self) -> None:
         packet = self.runtime.service.diagnose(
             resume_path=self._resume_fixture(),

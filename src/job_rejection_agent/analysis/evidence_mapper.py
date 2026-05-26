@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from job_rejection_agent.domain import EvidenceGap, JobRequirements, ProvenanceNote, ResumeFacts
+from job_rejection_agent.domain import ATSCheckResult, EvidenceGap, JobRequirements, ProvenanceNote, ResumeFacts
 from job_rejection_agent.ingestion.rejection_notes import RejectionSignals
 
 
@@ -10,6 +10,8 @@ def build_gap_inventory(
     resume_facts: ResumeFacts,
     requirements: JobRequirements,
     rejection_signals: RejectionSignals,
+    *,
+    ats_checks: list[ATSCheckResult],
 ) -> tuple[list[str], list[str], list[str], list[EvidenceGap], list[ProvenanceNote]]:
     resume_skill_set = set(resume_facts.skills)
     required_skill_set = set(requirements.required_skills)
@@ -47,15 +49,15 @@ def build_gap_inventory(
             )
         )
 
-    for finding in resume_facts.ats_findings[:3]:
+    for check in [item for item in ats_checks if item.status != "pass"][:3]:
         gaps.append(
             EvidenceGap(
                 category="ats",
-                title="ATS formatting issue",
-                severity="medium",
-                details=finding,
-                recommended_fix="Simplify the formatting and tighten the highest-impact bullets first.",
-                supporting_evidence=[finding],
+                title=check.title,
+                severity="high" if check.status == "fail" else "medium",
+                details=check.details,
+                recommended_fix=check.recommendation,
+                supporting_evidence=[check.details],
             )
         )
 
@@ -85,7 +87,14 @@ def build_gap_inventory(
         )
     for note in rejection_signals.notes[:2]:
         provenance.append(ProvenanceNote(label="Recruiter feedback", evidence=note, source="rejection_note"))
+    for check in [item for item in ats_checks if item.status != "pass"][:2]:
+        provenance.append(
+            ProvenanceNote(
+                label=f"ATS check: {check.category.replace('_', ' ')}",
+                evidence=check.details,
+                source="heuristic",
+            )
+        )
 
     gaps.sort(key=lambda item: {"high": 0, "medium": 1, "low": 2}[item.severity])
     return matched_skills, missing_skills, sorted(set(under_evidenced_skills)), gaps, provenance
-
