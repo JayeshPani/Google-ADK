@@ -46,13 +46,17 @@ class AgentRuntime:
             jd_text: str,
             rejection_notes: str = "",
             user_id: str = "anonymous",
+            tool_context: Any | None = None,
         ) -> dict[str, Any]:
             """Run the full rejection diagnosis pipeline and return a saved packet."""
+            session_id = getattr(getattr(tool_context, "session", None), "id", None)
+            effective_user_id = getattr(tool_context, "user_id", None) or user_id
             result = service.diagnose(
                 resume_path=resume_path,
                 jd_text=jd_text,
                 rejection_notes=rejection_notes,
-                user_id=user_id,
+                user_id=effective_user_id,
+                session_id=session_id,
                 persist=True,
             )
             return {

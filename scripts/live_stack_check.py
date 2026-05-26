@@ -5,16 +5,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
-import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from job_rejection_agent.agents.root_agent import AgentRuntime
 from job_rejection_agent.observability import evaluate_packet
-from job_rejection_agent.observability.phoenix_mcp import query_trace_summary_by_ids, query_trace_summary_by_session_id
+from job_rejection_agent.observability.live_verifier import verify_live_stack_run, wait_for_trace_readback
 from job_rejection_agent.services import DiagnosticService
 
 
@@ -38,22 +36,12 @@ def _print_summary(summary: dict[str, object] | None) -> int:
 
 
 def _readback_session(session_id: str) -> int:
-    summary = None
-    for attempt in range(6):
-        summary = query_trace_summary_by_session_id(session_id)
-        if summary:
-            break
-        time.sleep(5)
+    summary = wait_for_trace_readback(session_id=session_id)
     return _print_summary(summary)
 
 
 def _readback_trace(trace_id: str, span_id: str) -> int:
-    summary = None
-    for attempt in range(6):
-        summary = query_trace_summary_by_ids(trace_id=trace_id, span_id=span_id)
-        if summary:
-            break
-        time.sleep(5)
+    summary = wait_for_trace_readback(trace_id=trace_id, span_id=span_id)
     return _print_summary(summary)
 
 
@@ -240,13 +228,13 @@ def main() -> int:
     if args.session_id:
         return _readback_session(args.session_id)
 
-    runtime = AgentRuntime()
-    result = runtime.run_diagnostic(
-        resume_path=str(ROOT / "tests" / "fixtures" / "resumes" / "nisha_ml_newgrad.txt"),
+    verification = verify_live_stack_run(
+        resume_path=ROOT / "tests" / "fixtures" / "resumes" / "nisha_ml_newgrad.txt",
         jd_text=(ROOT / "tests" / "fixtures" / "jds" / "ml_platform_engineer.md").read_text(encoding="utf-8"),
         rejection_notes="Recruiter said the profile felt promising but not yet production-ready.",
         user_id="live-stack-check",
     )
+    result = verification["result"]
 
     print(
         {
@@ -258,17 +246,7 @@ def main() -> int:
             "eval_scores": result.get("eval_scores"),
         }
     )
-
-    session_id = result.get("session_id", "")
-    if not session_id:
-        print("verification_status=failed reason=missing_session_id")
-        return 1
-
-    trace_id = result.get("trace_id", "")
-    span_id = result.get("root_span_id", "")
-    if trace_id and span_id:
-        return _readback_trace(trace_id, span_id)
-    return _readback_session(session_id)
+    return _print_summary(verification.get("readback_summary"))
 
 
 if __name__ == "__main__":
