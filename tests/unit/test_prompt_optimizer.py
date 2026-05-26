@@ -12,6 +12,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from job_rejection_agent.config import Settings
+from job_rejection_agent.domain import ImprovementRun
 from job_rejection_agent.observability.prompt_optimizer import PromptEvaluationSuite, PromptOptimizer
 
 
@@ -45,6 +46,92 @@ def _suite(
 
 
 class PromptOptimizerTests(unittest.TestCase):
+    def test_successful_diagnoses_trigger_automatic_optimization_on_cadence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            settings = Settings(
+                google_api_key=None,
+                phoenix_api_key="phoenix-key",
+                improvement_state_path=temp_root / "improvement_state.json",
+                auto_prompt_improvement_every_n_diagnoses=2,
+            )
+            optimizer = PromptOptimizer(settings=settings)
+            improvement_run = ImprovementRun(
+                run_id="run-1",
+                baseline_prompt_version="baseline-v1",
+                candidate_prompt_version="baseline-v1-candidate",
+                source_span_ids=["span-1"],
+                baseline_scores={"composite_score": 0.7},
+                candidate_scores={"composite_score": 0.76},
+                promoted=True,
+                analysis="Candidate improved the held-out suite without regressions.",
+            )
+
+            with mock.patch.object(optimizer, "optimize", return_value=("candidate prompt", improvement_run)) as optimize_mock:
+                first_snapshot = optimizer.record_successful_diagnosis(packet_id="packet-1", session_id="session-1")
+                second_snapshot = optimizer.record_successful_diagnosis(packet_id="packet-2", session_id="session-2")
+
+        self.assertEqual(optimize_mock.call_count, 1)
+        self.assertIsNone(first_snapshot["improvement_run"])
+        self.assertEqual(first_snapshot["diagnoses_until_next_run"], 1)
+        self.assertIsNotNone(second_snapshot["improvement_run"])
+        self.assertEqual(second_snapshot["improvement_run"].run_id, "run-1")
+        self.assertEqual(second_snapshot["candidate_prompt"], "candidate prompt")
+        self.assertEqual(second_snapshot["last_auto_run_diagnosis_count"], 2)
+        self.assertEqual(second_snapshot["diagnoses_until_next_run"], 2)
+
+    def test_optimize_persists_latest_snapshot_for_settings_page(self) -> None:
+        baseline_prompt = "Diagnose ats, evidence, and level-fit gaps.\nProvide exact edits.\n"
+        traces = [{"span_id": "span-1", "annotations": []}]
+        baseline_suite = _suite(
+            composite_score=0.71,
+            actionability=0.65,
+            evidence_grounding=0.8,
+            specificity=0.7,
+            non_hallucination=1.0,
+            expectation_score=0.75,
+        )
+        candidate_suite = _suite(
+            composite_score=0.78,
+            actionability=0.8,
+            evidence_grounding=0.85,
+            specificity=0.75,
+            non_hallucination=1.0,
+            expectation_score=0.82,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            prompt_path = temp_root / "coaching_system_prompt.txt"
+            candidate_path = temp_root / "coaching_system_prompt_candidate.txt"
+            history_dir = temp_root / "prompt_history"
+            state_path = temp_root / "improvement_state.json"
+            prompt_path.write_text(baseline_prompt, encoding="utf-8")
+            settings = Settings(
+                google_api_key="dummy-google",
+                phoenix_api_key="phoenix-key",
+                prompt_path=prompt_path,
+                prompt_candidate_path=candidate_path,
+                prompt_history_dir=history_dir,
+                improvement_state_path=state_path,
+            )
+            optimizer = PromptOptimizer(settings=settings)
+            with (
+                mock.patch.object(optimizer, "_call_llm", return_value=None),
+                mock.patch(
+                    "job_rejection_agent.observability.prompt_optimizer.query_low_scoring_trace_summaries",
+                    return_value=traces,
+                ),
+                mock.patch.object(optimizer, "_run_prompt_suite", side_effect=[baseline_suite, candidate_suite]),
+            ):
+                candidate_prompt, improvement_run = optimizer.optimize()
+
+            snapshot = optimizer.latest_snapshot()
+
+        self.assertEqual(snapshot["candidate_prompt"], candidate_prompt)
+        self.assertIsNotNone(snapshot["improvement_run"])
+        self.assertEqual(snapshot["improvement_run"].run_id, improvement_run.run_id)
+        self.assertTrue(snapshot["improvement_run"].promoted)
+
     def test_candidate_prompt_uses_low_scoring_trace_failures_when_live_gate_unavailable(self) -> None:
         baseline_prompt = "\n".join(
             [

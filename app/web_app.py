@@ -10,7 +10,7 @@ from typing import Any
 import sys
 import uuid
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -21,7 +21,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from job_rejection_agent.agents import AgentRuntime
 from job_rejection_agent.config import Settings, get_settings
-from job_rejection_agent.domain import ImprovementRun, RewritePatch, SavedJobPacket, TrackerEntry
+from job_rejection_agent.domain import RewritePatch, SavedJobPacket, TrackerEntry
 from job_rejection_agent.ingestion import parse_resume_file
 from job_rejection_agent.observability import PromptOptimizer
 from job_rejection_agent.services import AuthError, AuthService, render_packet_markdown
@@ -681,6 +681,7 @@ def create_app(
     @app.post("/diagnose")
     async def run_diagnosis(
         request: Request,
+        background_tasks: BackgroundTasks,
         jd_text: str = Form(""),
         rejection_notes: str = Form(""),
         demo_case: str = Form(""),
@@ -785,7 +786,13 @@ def create_app(
             if temp_path is not None and temp_path.exists():
                 temp_path.unlink(missing_ok=True)
 
+        background_tasks.add_task(
+            optimizer.record_successful_diagnosis,
+            packet_id=str(result.get("packet_id", "")),
+            session_id=str(result.get("session_id", "")),
+        )
         response = RedirectResponse(url=f"/?packet_id={result['packet_id']}", status_code=303)
+        response.background = background_tasks
         if viewer.should_set_guest_cookie:
             _set_guest_cookie(response, viewer.user_id)
         return response
@@ -896,49 +903,16 @@ def create_app(
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        improvement_snapshot = optimizer.latest_snapshot()
         return _render(
             request,
             "settings.html",
             viewer=viewer,
             context={
                 "active_item": "settings",
-                "improvement_run": None,
-                "candidate_prompt": "",
-                "runtime_status": {
-                    "adk_enabled": runtime.adk_available(),
-                    "model_chain": runtime.settings.generation_model_candidates,
-                    "phoenix_project": runtime.settings.phoenix_project_name,
-                    "collector": runtime.settings.phoenix_collector_endpoint,
-                },
-            },
-        )
-
-    @app.post("/settings/improve", response_class=HTMLResponse)
-    async def run_improvement(request: Request) -> HTMLResponse:
-        viewer = _user_identity(request, auth_service)
-        candidate_prompt = ""
-        improvement_run: ImprovementRun | None = None
-        try:
-            candidate_prompt, improvement_run = optimizer.optimize()
-        except Exception as exc:
-            improvement_run = ImprovementRun(
-                run_id=str(uuid.uuid4()),
-                baseline_prompt_version=runtime.settings.prompt_version,
-                candidate_prompt_version="failed-run",
-                source_span_ids=[],
-                baseline_scores={},
-                candidate_scores={},
-                promoted=False,
-                analysis=f"Prompt improvement failed: {exc!r}",
-            )
-        return _render(
-            request,
-            "settings.html",
-            viewer=viewer,
-            context={
-                "active_item": "settings",
-                "improvement_run": improvement_run,
-                "candidate_prompt": candidate_prompt,
+                "improvement_run": improvement_snapshot["improvement_run"],
+                "candidate_prompt": improvement_snapshot["candidate_prompt"],
+                "improvement_status": improvement_snapshot,
                 "runtime_status": {
                     "adk_enabled": runtime.adk_available(),
                     "model_chain": runtime.settings.generation_model_candidates,

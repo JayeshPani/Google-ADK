@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import tempfile
-import types
 import unittest
 from unittest import mock
 
@@ -19,9 +18,33 @@ if str(SRC) not in sys.path:
 from app.web_app import COOKIE_NAME, GOOGLE_STATE_COOKIE_NAME, SESSION_COOKIE_NAME, create_app
 from job_rejection_agent.agents.root_agent import AgentRuntime
 from job_rejection_agent.config import Settings
+from job_rejection_agent.domain import ImprovementRun
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures"
+
+
+class FakeOptimizer:
+    def __init__(self) -> None:
+        self.record_successful_diagnosis = mock.Mock(return_value={})
+        self.latest_snapshot = mock.Mock(
+            return_value={
+                "status": "idle",
+                "auto_enabled": True,
+                "auto_interval": 5,
+                "successful_diagnosis_count": 0,
+                "last_auto_run_diagnosis_count": 0,
+                "diagnoses_since_last_run": 0,
+                "diagnoses_until_next_run": 5,
+                "last_started_at": "",
+                "last_completed_at": "",
+                "last_error": "",
+                "last_trigger_packet_id": "",
+                "last_trigger_session_id": "",
+                "candidate_prompt": "",
+                "improvement_run": None,
+            }
+        )
 
 
 class WebAppTests(unittest.TestCase):
@@ -40,7 +63,7 @@ class WebAppTests(unittest.TestCase):
             app_secret_key="test-secret",
         )
         self.runtime = AgentRuntime(settings=self.settings)
-        self.optimizer = types.SimpleNamespace(optimize=lambda: ("", None))
+        self.optimizer = FakeOptimizer()
         self.app = create_app(settings=self.settings, runtime=self.runtime, optimizer=self.optimizer)
         self.client = TestClient(self.app)
         self.user_id = "guest-webapp"
@@ -103,6 +126,7 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(result_page.status_code, 200)
         self.assertIn("Analysis Complete", result_page.text)
         self.assertIn("arjun_backend_student.txt", result_page.text)
+        self.optimizer.record_successful_diagnosis.assert_called_once()
 
     def test_diagnose_failure_keeps_resume_preview_visible(self) -> None:
         with mock.patch.object(
@@ -204,6 +228,40 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(callback.status_code, 303)
         self.assertEqual(callback.headers["location"], "/history")
         self.assertIn(SESSION_COOKIE_NAME, callback.headers.get("set-cookie", ""))
+
+    def test_settings_page_describes_automatic_improvement_without_manual_button(self) -> None:
+        self.optimizer.latest_snapshot.return_value = {
+            "status": "idle",
+            "auto_enabled": True,
+            "auto_interval": 5,
+            "successful_diagnosis_count": 7,
+            "last_auto_run_diagnosis_count": 5,
+            "diagnoses_since_last_run": 2,
+            "diagnoses_until_next_run": 3,
+            "last_started_at": "",
+            "last_completed_at": "2026-05-27T09:30:00+00:00",
+            "last_error": "",
+            "last_trigger_packet_id": "packet-1",
+            "last_trigger_session_id": "session-1",
+            "candidate_prompt": "Prompt preview",
+            "improvement_run": ImprovementRun(
+                run_id="run-1",
+                baseline_prompt_version="baseline-v1",
+                candidate_prompt_version="baseline-v1-candidate",
+                source_span_ids=["span-1"],
+                baseline_scores={"composite_score": 0.7},
+                candidate_scores={"composite_score": 0.76},
+                promoted=True,
+                analysis="Candidate improved the held-out suite without regressions.",
+            ),
+        }
+
+        response = self.client.get("/settings")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Every 5 successful diagnoses", response.text)
+        self.assertIn("Next Auto Run", response.text)
+        self.assertNotIn("Run Improvement Loop", response.text)
 
 
 if __name__ == "__main__":

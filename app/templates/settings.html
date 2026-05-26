@@ -7,16 +7,21 @@
   <header class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
     <div class="space-y-2">
       <h1 class="text-4xl font-medium">Observability & Prompt Improvement</h1>
-      <p class="text-gray-500">Trace health, runtime configuration, and the guarded self-improvement loop.</p>
+      <p class="text-gray-500">Trace health, runtime configuration, and the guarded self-improvement loop that runs automatically in the background.</p>
     </div>
-    <form method="post" action="/settings/improve">
-      <button type="submit" class="px-8 py-4 bg-[#6B8E83] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 hover:bg-[#5A7A70] transition-all">
-        Run Improvement Loop
-      </button>
-    </form>
+    <div class="px-6 py-4 bg-white rounded-[24px] border border-[#EBE9E4] min-w-[260px]">
+      <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Auto cadence</div>
+      <div class="text-lg font-semibold">Every {{ improvement_status.auto_interval }} successful diagnoses</div>
+      <p class="text-sm text-gray-500 mt-2">
+        Status:
+        <span class="font-medium {{ 'text-amber-700' if improvement_status.status == 'running' else 'text-gray-700' }}">
+          {{ 'Running now' if improvement_status.status == 'running' else 'Idle' }}
+        </span>
+      </p>
+    </div>
   </header>
 
-  <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+  <section class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-12">
     <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4]">
       <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">ADK Runtime</div>
       <div class="text-2xl font-semibold">{{ "Live" if runtime_status.adk_enabled else "Fallback" }}</div>
@@ -29,13 +34,31 @@
       <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Phoenix Project</div>
       <div class="text-sm font-medium">{{ runtime_status.phoenix_project }}</div>
     </div>
+    <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4]">
+      <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Next Auto Run</div>
+      <div class="text-2xl font-semibold">
+        {% if improvement_status.status == "running" %}
+        In Progress
+        {% else %}
+        {{ improvement_status.diagnoses_until_next_run }} left
+        {% endif %}
+      </div>
+      <div class="text-sm text-gray-500 mt-2">{{ improvement_status.successful_diagnosis_count }} successful diagnoses observed.</div>
+    </div>
   </section>
 
   <section class="bg-white rounded-[32px] border border-[#EBE9E4] p-8 md:p-10 space-y-8">
     <div class="space-y-2">
       <h2 class="text-3xl font-medium">Guarded Promotion Gate</h2>
-      <p class="text-gray-500">Candidate prompts are only promoted if held-out live runs improve without regressing any guarded metric.</p>
+      <p class="text-gray-500">Candidate prompts are only promoted if held-out live runs improve without regressing any guarded metric. The loop is triggered automatically after each cadence window.</p>
     </div>
+
+    {% if improvement_status.last_error %}
+    <div class="p-6 rounded-3xl border border-rose-200 bg-rose-50 text-rose-800">
+      <div class="text-xs font-bold uppercase tracking-widest mb-2">Last Auto-Run Error</div>
+      <div class="text-sm">{{ improvement_status.last_error }}</div>
+    </div>
+    {% endif %}
 
     {% if improvement_run %}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -47,8 +70,11 @@
         <p class="text-sm text-gray-500 mt-4">{{ improvement_run.analysis }}</p>
       </div>
       <div class="p-6 rounded-3xl border border-[#EBE9E4] bg-[#F9F8F6]">
-        <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Source Spans</div>
+        <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Run Metadata</div>
         <div class="text-sm text-gray-600">{{ improvement_run.source_span_ids|length }} trace-backed cases contributed to this run.</div>
+        {% if improvement_status.last_completed_at %}
+        <div class="text-sm text-gray-500 mt-3">Completed: {{ improvement_status.last_completed_at }}</div>
+        {% endif %}
       </div>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -77,7 +103,7 @@
     </div>
     {% else %}
     <div class="p-8 rounded-3xl border border-dashed border-[#EBE9E4] text-center text-gray-500">
-      No improvement run yet. Trigger the loop to evaluate a candidate prompt against held-out live runs.
+      No automatic improvement run has completed yet. Once the app reaches the configured cadence, it will evaluate a candidate prompt against held-out live runs on its own.
     </div>
     {% endif %}
 
@@ -88,4 +114,3 @@
   </section>
 </main>
 {% endblock %}
-

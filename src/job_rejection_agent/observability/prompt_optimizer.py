@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+from threading import Lock
 import uuid
 from typing import Any
 
@@ -50,6 +51,88 @@ class PromptOptimizer:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         self.settings.prompt_history_dir.mkdir(exist_ok=True)
+        self.settings.improvement_state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._state_lock = Lock()
+
+    def _default_state(self) -> dict[str, Any]:
+        return {
+            "status": "idle",
+            "successful_diagnosis_count": 0,
+            "last_auto_run_diagnosis_count": 0,
+            "last_started_at": "",
+            "last_completed_at": "",
+            "last_error": "",
+            "last_trigger_packet_id": "",
+            "last_trigger_session_id": "",
+            "candidate_prompt": "",
+            "improvement_run": None,
+        }
+
+    def _load_state(self) -> dict[str, Any]:
+        state_path = self.settings.improvement_state_path
+        if not state_path.exists():
+            return self._default_state()
+        try:
+            payload = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return self._default_state()
+        return {**self._default_state(), **payload}
+
+    def _save_state(self, state: dict[str, Any]) -> None:
+        self.settings.improvement_state_path.write_text(
+            json.dumps(state, indent=2),
+            encoding="utf-8",
+        )
+
+    def _persist_snapshot(
+        self,
+        *,
+        candidate_prompt: str | None = None,
+        improvement_run: ImprovementRun | None = None,
+        status: str | None = None,
+        last_error: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        with self._state_lock:
+            state = self._load_state()
+            if candidate_prompt is not None:
+                state["candidate_prompt"] = candidate_prompt
+            if improvement_run is not None:
+                state["improvement_run"] = improvement_run.to_dict()
+            if status is not None:
+                state["status"] = status
+            if last_error is not None:
+                state["last_error"] = last_error
+            if extra:
+                state.update(extra)
+            self._save_state(state)
+            return state
+
+    def latest_snapshot(self) -> dict[str, Any]:
+        with self._state_lock:
+            state = self._load_state()
+        interval = max(1, self.settings.auto_prompt_improvement_every_n_diagnoses)
+        successful_count = int(state.get("successful_diagnosis_count", 0) or 0)
+        last_auto_run_count = int(state.get("last_auto_run_diagnosis_count", 0) or 0)
+        diagnoses_since_last_run = max(0, successful_count - last_auto_run_count)
+        diagnoses_until_next_run = 0 if state.get("status") == "running" else max(0, interval - diagnoses_since_last_run)
+        improvement_payload = state.get("improvement_run")
+        return {
+            "status": str(state.get("status", "idle")),
+            "auto_enabled": bool(self.settings.auto_prompt_improvement_enabled),
+            "auto_interval": interval,
+            "successful_diagnosis_count": successful_count,
+            "last_auto_run_diagnosis_count": last_auto_run_count,
+            "diagnoses_since_last_run": diagnoses_since_last_run,
+            "diagnoses_until_next_run": diagnoses_until_next_run,
+            "last_started_at": str(state.get("last_started_at", "")),
+            "last_completed_at": str(state.get("last_completed_at", "")),
+            "last_error": str(state.get("last_error", "")),
+            "last_trigger_packet_id": str(state.get("last_trigger_packet_id", "")),
+            "last_trigger_session_id": str(state.get("last_trigger_session_id", "")),
+            "candidate_prompt": str(state.get("candidate_prompt", "")),
+            "improvement_run": ImprovementRun.from_dict(improvement_payload) if isinstance(improvement_payload, dict) else None,
+        }
 
     def _load_prompt(self, path: Path) -> str:
         return path.read_text(encoding="utf-8") if path.exists() else ""
@@ -453,6 +536,83 @@ class PromptOptimizer:
             ]
         )
 
+    def record_successful_diagnosis(
+        self,
+        *,
+        packet_id: str = "",
+        session_id: str = "",
+    ) -> dict[str, Any]:
+        interval = max(1, self.settings.auto_prompt_improvement_every_n_diagnoses)
+        if not self.settings.auto_prompt_improvement_enabled:
+            return self.latest_snapshot()
+
+        should_run = False
+        target_count = 0
+        started_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        with self._state_lock:
+            state = self._load_state()
+            successful_count = int(state.get("successful_diagnosis_count", 0) or 0) + 1
+            last_auto_run_count = int(state.get("last_auto_run_diagnosis_count", 0) or 0)
+            state.update(
+                {
+                    "successful_diagnosis_count": successful_count,
+                    "last_trigger_packet_id": packet_id,
+                    "last_trigger_session_id": session_id,
+                }
+            )
+            diagnoses_since_last_run = successful_count - last_auto_run_count
+            if state.get("status") != "running" and diagnoses_since_last_run >= interval:
+                should_run = True
+                target_count = successful_count
+                state.update(
+                    {
+                        "status": "running",
+                        "last_started_at": started_at,
+                        "last_error": "",
+                    }
+                )
+            self._save_state(state)
+
+        if not should_run:
+            return self.latest_snapshot()
+
+        try:
+            candidate_prompt, improvement_run = self.optimize()
+        except Exception as exc:
+            failure_run = ImprovementRun(
+                run_id=str(uuid.uuid4()),
+                baseline_prompt_version=self.settings.prompt_version,
+                candidate_prompt_version=f"{self.settings.prompt_version}-candidate",
+                source_span_ids=[],
+                baseline_scores={},
+                candidate_scores={},
+                promoted=False,
+                analysis=f"Automatic prompt improvement failed: {exc!r}",
+            )
+            self._persist_snapshot(
+                candidate_prompt="",
+                improvement_run=failure_run,
+                status="idle",
+                last_error=str(exc),
+                extra={
+                    "last_completed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                    "last_auto_run_diagnosis_count": target_count,
+                },
+            )
+            return self.latest_snapshot()
+
+        self._persist_snapshot(
+            candidate_prompt=candidate_prompt,
+            improvement_run=improvement_run,
+            status="idle",
+            last_error="",
+            extra={
+                "last_completed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                "last_auto_run_diagnosis_count": target_count,
+            },
+        )
+        return self.latest_snapshot()
+
     def optimize(self) -> tuple[str, ImprovementRun]:
         baseline = self._load_prompt(self.settings.prompt_path)
         traces = query_low_scoring_trace_summaries(settings=self.settings)
@@ -490,5 +650,11 @@ class PromptOptimizer:
             candidate_scores=candidate_suite.scores,
             promoted=promoted,
             analysis=analysis,
+        )
+        self._persist_snapshot(
+            candidate_prompt=candidate_prompt,
+            improvement_run=improvement_run,
+            status="idle",
+            last_error="",
         )
         return candidate_prompt, improvement_run

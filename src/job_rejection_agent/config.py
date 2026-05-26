@@ -55,11 +55,14 @@ class Settings:
     session_db_url: str = "sqlite+aiosqlite:///./.local/adk_sessions.db"
     local_storage_path: Path = LOCAL_DIR / "job_packets.json"
     local_user_storage_path: Path = LOCAL_DIR / "users.json"
+    improvement_state_path: Path = LOCAL_DIR / "prompt_improvement_state.json"
     prompt_version: str = "baseline-v1"
     prompt_path: Path = PROMPTS_DIR / "coaching_system_prompt.txt"
     prompt_candidate_path: Path = PROMPTS_DIR / "coaching_system_prompt_candidate.txt"
     prompt_history_dir: Path = PROMPT_HISTORY_DIR
     app_secret_key: str = "local-dev-secret"
+    auto_prompt_improvement_enabled: bool = True
+    auto_prompt_improvement_every_n_diagnoses: int = 5
 
     @property
     def phoenix_headers(self) -> dict[str, str]:
@@ -105,6 +108,16 @@ def _read_bool(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _read_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value.strip())
+    except ValueError:
+        return default
 
 
 def _default_mcp_command() -> str:
@@ -191,6 +204,7 @@ def get_settings() -> Settings:
         session_db_url=os.getenv("SESSION_DB_URL", "sqlite+aiosqlite:///./.local/adk_sessions.db"),
         local_storage_path=Path(os.getenv("LOCAL_STORAGE_PATH", ".local/job_packets.json")),
         local_user_storage_path=Path(os.getenv("LOCAL_USER_STORAGE_PATH", ".local/users.json")),
+        improvement_state_path=Path(os.getenv("IMPROVEMENT_STATE_PATH", ".local/prompt_improvement_state.json")),
         prompt_version=os.getenv("PROMPT_VERSION", "baseline-v1"),
         app_secret_key=(
             os.getenv("APP_SECRET_KEY")
@@ -198,4 +212,6 @@ def get_settings() -> Settings:
             or google_api_key
             or "local-dev-secret"
         ),
+        auto_prompt_improvement_enabled=_read_bool("AUTO_PROMPT_IMPROVEMENT_ENABLED", default=True),
+        auto_prompt_improvement_every_n_diagnoses=max(1, _read_int("AUTO_PROMPT_IMPROVEMENT_EVERY_N_DIAGNOSES", default=5)),
     )
