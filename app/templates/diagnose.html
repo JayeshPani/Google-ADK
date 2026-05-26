@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+
+{% block title %}Refine | Job Rejection Diagnostic Copilot{% endblock %}
+
+{% block head_extra %}
+<style>
+  #loading-overlay {
+    display: none;
+  }
+  #loading-overlay.active {
+    display: flex;
+  }
+  .resume-preview-shell iframe {
+    min-height: 340px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="flex-1 w-full max-w-5xl mx-auto px-6 py-12 md:py-20">
+  {% if not packet %}
+  <section id="input-section" class="animate-in fade-in duration-700">
+    <div class="text-center mb-16 space-y-4">
+      <h1 class="text-4xl md:text-5xl font-medium">Diagnose the gap.</h1>
+      <p class="text-lg text-gray-500 max-w-xl mx-auto">
+        Evidence-first job rejection diagnostic tool for students and early-career professionals.
+      </p>
+    </div>
+    <form action="/diagnose" method="post" enctype="multipart/form-data" class="bg-white rounded-[32px] border border-[#EBE9E4] shadow-sm overflow-hidden p-8 md:p-12" id="diagnose-form">
+      <div class="space-y-10">
+        {% if error_message %}
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800 flex items-start gap-3">
+          <iconify-icon icon="lucide:alert-triangle" class="text-lg mt-0.5"></iconify-icon>
+          <div class="space-y-1">
+            <p class="font-semibold">The diagnosis did not run.</p>
+            <p>{{ error_message }}</p>
+            {% if resume_hint %}
+            <p class="text-xs text-rose-700">Resume selected: {{ resume_hint }}. Re-upload it if your browser cleared the file input.</p>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div class="space-y-6">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Resume</label>
+              <label class="relative group border-2 border-dashed border-[#EBE9E4] rounded-2xl p-8 transition-all hover:border-[#6B8E83] hover:bg-[#F0F4F2]/30 cursor-pointer text-center block">
+                <input type="file" name="resume" class="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf,.docx,.txt,.md" id="resume-input">
+                <iconify-icon icon="lucide:upload-cloud" class="text-4xl text-gray-300 group-hover:text-[#6B8E83] mb-4 transition-colors"></iconify-icon>
+                <p class="text-sm text-gray-600"><span class="font-semibold">Upload Resume</span> or drag and drop</p>
+                <p class="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD</p>
+              </label>
+              <div class="mt-3 flex items-center gap-2 text-xs text-[#6B8E83] font-medium {% if demo_case_key %}hidden{% endif %}" id="resume-loaded">
+                <iconify-icon icon="lucide:file-check"></iconify-icon>
+                <span id="resume-file-label">{{ resume_hint if resume_hint else "No file selected" }}</span>
+              </div>
+            </div>
+            <div id="resume-preview-shell" class="resume-preview-shell {% if not resume_preview %}hidden{% endif %} rounded-2xl border border-[#EBE9E4] bg-[#FDFCF9] overflow-hidden">
+              <div class="px-5 py-4 border-b border-[#EBE9E4] flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Resume Preview</p>
+                  <p class="text-sm font-semibold text-gray-700" id="resume-preview-name">{{ resume_preview.display_name if resume_preview else "Uploaded file" }}</p>
+                </div>
+                <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider">
+                  <span class="px-2.5 py-1 rounded-full bg-white border border-[#EBE9E4] text-gray-500" id="resume-preview-type">{{ resume_preview.file_type if resume_preview else "FILE" }}</span>
+                </div>
+              </div>
+              <div class="p-5 space-y-4">
+                <div id="resume-preview-text-block" class="{% if not resume_preview %}hidden{% endif %}">
+                  <p class="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2">Parsed Text Preview</p>
+                  <pre id="resume-preview-text" class="whitespace-pre-wrap break-words text-xs leading-6 text-gray-600 bg-white border border-[#EBE9E4] rounded-xl p-4 max-h-80 overflow-auto">{{ resume_preview.text if resume_preview else "" }}</pre>
+                  <div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-gray-400">
+                    <span id="resume-preview-lines">{% if resume_preview %}{{ resume_preview.line_count }} lines shown{% endif %}</span>
+                    <span id="resume-preview-truncated">{% if resume_preview and resume_preview.is_truncated %}Preview truncated for readability.{% endif %}</span>
+                  </div>
+                </div>
+                <div id="resume-preview-pdf-block" class="hidden">
+                  <p class="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2">PDF Preview</p>
+                  <iframe id="resume-preview-pdf-frame" class="w-full rounded-xl border border-[#EBE9E4] bg-white" title="Resume preview"></iframe>
+                </div>
+                <div id="resume-preview-empty" class="{% if resume_preview %}hidden{% endif %} text-xs text-gray-400">
+                  Select a file to preview the uploaded resume before running the diagnosis.
+                </div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Rejection Notes (Optional)</label>
+              <textarea name="rejection_notes" placeholder="Paste recruiter feedback or rejection email snippets here..." class="w-full h-32 px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm resize-none">{{ form_state.rejection_notes }}</textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Demo Case (Optional)</label>
+              <select name="demo_case" class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm">
+                <option value="">Use my own resume</option>
+                {% for key, demo in demo_cases.items() %}
+                <option value="{{ key }}" {% if form_state.demo_case == key %}selected{% endif %}>{{ demo.label }}</option>
+                {% endfor %}
+              </select>
+              <p class="text-xs text-gray-400 mt-2">If you choose a demo case and upload a resume, your upload wins.</p>
+            </div>
+          </div>
+          <div class="space-y-6">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Job Description</label>
+              <textarea name="jd_text" placeholder="Paste the full job description or role requirements..." class="w-full h-[452px] px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm resize-none">{{ form_state.jd_text if form_state.jd_text else demo_jd }}</textarea>
+            </div>
+          </div>
+        </div>
+        <div class="pt-6 border-t border-[#F5F3F0] flex flex-col md:flex-row items-center justify-between gap-6">
+          <div class="flex flex-wrap items-center gap-3 text-xs">
+            <span class="text-gray-400 font-medium uppercase tracking-wider">Runtime</span>
+            <span class="px-3 py-1.5 rounded-full bg-gray-100 text-gray-600">{{ "ADK live" if runtime_status.adk_enabled else "Deterministic fallback" }}</span>
+            <span class="px-3 py-1.5 rounded-full bg-gray-100 text-gray-600">Phoenix: {{ runtime_status.phoenix_project }}</span>
+          </div>
+          <button type="submit" class="w-full md:w-auto px-10 py-4 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 transition-all transform active:scale-[0.98]">
+            Run Diagnosis
+          </button>
+        </div>
+      </div>
+    </form>
+  </section>
+  {% else %}
+  <section id="diagnosis-results" class="pt-4 space-y-12 animate-in slide-in-from-bottom-8 duration-1000">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-[#EBE9E4] pb-8">
+      <div class="space-y-2">
+        <div><span class="text-xs font-bold text-[#6B8E83] uppercase tracking-widest">Analysis Complete</span></div>
+        <h2 class="text-3xl font-medium">{{ packet.job_requirements.role_title or "Untitled role" }} <span class="text-gray-400 font-normal">at</span> {{ packet.job_requirements.company_name or "Target company" }}</h2>
+        <p class="text-gray-500 flex items-center gap-2">
+          <iconify-icon icon="lucide:file-text"></iconify-icon> {{ packet.resume_name }}
+        </p>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="px-6 py-3 rounded-2xl flex items-center gap-3 {{ packet_meta.badge_class }}">
+          <iconify-icon icon="lucide:alert-circle" class="text-xl"></iconify-icon>
+          <div class="flex flex-col">
+            <span class="text-[10px] font-bold uppercase">Recommendation</span>
+            <span class="text-sm font-semibold">{{ packet_meta.label }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4] text-center space-y-1">
+        <span class="text-3xl font-semibold">{{ "%.1f"|format(packet.report.score_overall) }}/10</span>
+        <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Overall Match</p>
+      </div>
+      <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4] text-center space-y-1">
+        <span class="text-3xl font-semibold">{{ "%.1f"|format(packet.report.score_ats) }}/10</span>
+        <p class="text-xs font-bold uppercase tracking-widest text-gray-400">ATS Visibility</p>
+      </div>
+      <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4] text-center space-y-1">
+        <span class="text-3xl font-semibold">{{ "%.1f"|format(packet.report.score_evidence) }}/10</span>
+        <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Evidence Strength</p>
+      </div>
+      <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4] text-center space-y-1">
+        <span class="text-3xl font-semibold">{{ "%.1f"|format(packet.report.score_level_fit) }}/10</span>
+        <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Level Fit</p>
+      </div>
+    </div>
+    <div class="bg-[#F5F3F0] rounded-[32px] p-8 md:p-12 space-y-8">
+      <div class="max-w-3xl">
+        <h3 class="text-2xl mb-4">The Diagnostic Summary</h3>
+        <p class="text-lg leading-relaxed text-gray-700">{{ packet.report.narrative_summary }}</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-12 pt-8">
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-6">Primary Rejection Drivers</h4>
+          <ul class="space-y-4">
+            {% for gap in packet.report.top_gaps[:3] %}
+            <li class="flex gap-3">
+              <iconify-icon icon="lucide:x-circle" class="text-red-400 mt-1"></iconify-icon>
+              <span class="text-sm">{{ gap.details }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-6">Top Missing Skills</h4>
+          <div class="flex flex-wrap gap-2">
+            {% for skill in top_skill_chips %}
+            <span class="px-3 py-1.5 bg-white border border-[#EBE9E4] rounded-full text-xs font-medium">{{ skill }}</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="space-y-10">
+      <div class="flex items-center justify-between">
+        <h3 class="text-3xl font-medium">The Patch <span class="text-gray-400 font-normal">— Exact Edits</span></h3>
+        <a href="/patch/{{ packet.packet_id }}" class="text-sm text-[#6B8E83] font-semibold flex items-center gap-2 hover:underline">
+          Open full patch plan <iconify-icon icon="lucide:arrow-right"></iconify-icon>
+        </a>
+      </div>
+      <div class="space-y-8">
+        {% for edit in preview_edits %}
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4 px-2">{{ edit.section }} section</h4>
+          <div class="bg-white rounded-2xl border border-[#EBE9E4] overflow-hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x border-[#EBE9E4]">
+              <div class="p-6 space-y-3 bg-gray-50/30">
+                <span class="text-[10px] font-bold text-gray-400 uppercase">Before</span>
+                <p class="text-sm text-gray-500 italic">{{ edit.original_text }}</p>
+              </div>
+              <div class="p-6 space-y-3">
+                <span class="text-[10px] font-bold text-[#6B8E83] uppercase">After (Recommended)</span>
+                <p class="text-sm leading-relaxed text-gray-800">{{ edit.rewritten_text }}</p>
+                <div class="pt-3 flex items-start gap-2 text-xs text-gray-500">
+                  <iconify-icon icon="lucide:info" class="text-[#6B8E83]"></iconify-icon>
+                  <span><span class="font-semibold">Why:</span> {{ edit.reason }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+      <div class="space-y-8">
+        <div>
+          <h3 class="text-2xl font-medium mb-6">1-Week Action Plan</h3>
+          <div class="space-y-4">
+            {% for step in preview_plan %}
+            <div class="flex gap-4 p-5 bg-white rounded-2xl border border-[#EBE9E4]">
+              <div class="step-number shrink-0">{{ loop.index }}</div>
+              <div class="space-y-1">
+                <p class="font-semibold text-sm">{{ step.split(':', 1)[0] if ':' in step else 'Next move' }}</p>
+                <p class="text-xs text-gray-500">{{ step.split(':', 1)[1].strip() if ':' in step else step }}</p>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="space-y-8">
+        <div>
+          <h3 class="text-2xl font-medium mb-6">Interview Prep</h3>
+          <div class="space-y-4">
+            {% for question in packet.report.interview_questions[:3] %}
+            <div class="group p-5 bg-white rounded-2xl border border-[#EBE9E4] hover:border-[#6B8E83] transition-all">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-xs font-bold text-[#6B8E83] uppercase tracking-tighter mb-1">Prompt {{ loop.index }}</p>
+                  <p class="font-semibold text-sm">{{ question }}</p>
+                </div>
+                <iconify-icon icon="lucide:chevron-right" class="text-gray-300 group-hover:text-[#6B8E83]"></iconify-icon>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-col md:flex-row items-center justify-center gap-4 pt-12 pb-20">
+      <a href="/history?packet_id={{ packet.packet_id }}" class="w-full md:w-auto px-8 py-3 bg-[#6B8E83] text-white rounded-xl font-semibold shadow-md">Save Analysis Packet</a>
+      <a href="/patch/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-3 bg-white border border-[#EBE9E4] text-gray-600 rounded-xl font-semibold">Open Patch Details</a>
+      <a href="/plan/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-3 bg-white border border-[#EBE9E4] text-gray-600 rounded-xl font-semibold">Open Action Plan</a>
+    </div>
+  </section>
+  {% endif %}
+</main>
+<div id="loading-overlay" class="fixed inset-0 z-50 bg-white/90 backdrop-blur-sm flex-col items-center justify-center">
+  <div class="w-16 h-16 border-4 border-[#F0F4F2] border-t-[#6B8E83] rounded-full animate-spin mb-6"></div>
+  <p class="serif text-2xl animate-pulse">Analyzing the evidence...</p>
+  <p class="text-sm text-gray-400 mt-2">Comparing your profile against the role requirements</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/mammoth@1.9.0/mammoth.browser.min.js"></script>
+<script>
+  const form = document.getElementById("diagnose-form");
+  const overlay = document.getElementById("loading-overlay");
+  const resumeInput = document.getElementById("resume-input");
+  const resumeLoaded = document.getElementById("resume-loaded");
+  const resumeLabel = document.getElementById("resume-file-label");
+  const previewShell = document.getElementById("resume-preview-shell");
+  const previewName = document.getElementById("resume-preview-name");
+  const previewType = document.getElementById("resume-preview-type");
+  const previewTextBlock = document.getElementById("resume-preview-text-block");
+  const previewText = document.getElementById("resume-preview-text");
+  const previewLines = document.getElementById("resume-preview-lines");
+  const previewTruncated = document.getElementById("resume-preview-truncated");
+  const previewPdfBlock = document.getElementById("resume-preview-pdf-block");
+  const previewPdfFrame = document.getElementById("resume-preview-pdf-frame");
+  const previewEmpty = document.getElementById("resume-preview-empty");
+  let currentPdfUrl = null;
+
+  const truncatePreview = (text, maxChars = 2200) => {
+    const normalized = text.replace(/\r\n/g, "\n").trim();
+    if (normalized.length <= maxChars) {
+      return { text: normalized, truncated: false };
+    }
+    return { text: normalized.slice(0, maxChars).trim() + "\n…", truncated: true };
+  };
+
+  const renderTextPreview = (name, typeLabel, text) => {
+    if (!previewShell || !previewName || !previewType || !previewTextBlock || !previewText || !previewPdfBlock || !previewEmpty) {
+      return;
+    }
+    const preview = truncatePreview(text || "");
+    previewShell.classList.remove("hidden");
+    previewName.textContent = name;
+    previewType.textContent = typeLabel;
+    previewText.textContent = preview.text || "No readable text was extracted from this file.";
+    previewLines.textContent = `${preview.text ? preview.text.split("\n").filter(line => line.trim()).length : 0} lines shown`;
+    previewTruncated.textContent = preview.truncated ? "Preview truncated for readability." : "";
+    previewTextBlock.classList.remove("hidden");
+    previewPdfBlock.classList.add("hidden");
+    previewEmpty.classList.add("hidden");
+  };
+
+  const renderPdfPreview = (file) => {
+    if (!previewShell || !previewName || !previewType || !previewPdfBlock || !previewPdfFrame || !previewTextBlock || !previewEmpty) {
+      return;
+    }
+    if (currentPdfUrl) {
+      URL.revokeObjectURL(currentPdfUrl);
+    }
+    currentPdfUrl = URL.createObjectURL(file);
+    previewShell.classList.remove("hidden");
+    previewName.textContent = file.name;
+    previewType.textContent = "PDF";
+    previewPdfFrame.src = currentPdfUrl;
+    previewPdfBlock.classList.remove("hidden");
+    previewTextBlock.classList.add("hidden");
+    previewEmpty.classList.add("hidden");
+  };
+
+  if (resumeInput && resumeLoaded && resumeLabel) {
+    resumeInput.addEventListener("change", async () => {
+      if (resumeInput.files && resumeInput.files.length > 0) {
+        const file = resumeInput.files[0];
+        const extension = (file.name.split(".").pop() || "").toLowerCase();
+        resumeLoaded.classList.remove("hidden");
+        resumeLabel.textContent = file.name + " loaded";
+
+        if (extension === "pdf") {
+          renderPdfPreview(file);
+          return;
+        }
+
+        if (extension === "txt" || extension === "md") {
+          renderTextPreview(file.name, extension.toUpperCase(), await file.text());
+          return;
+        }
+
+        if (extension === "docx" && window.mammoth) {
+          try {
+            const buffer = await file.arrayBuffer();
+            const result = await window.mammoth.extractRawText({ arrayBuffer: buffer });
+            renderTextPreview(file.name, "DOCX", result.value || "");
+            return;
+          } catch (error) {
+            renderTextPreview(file.name, "DOCX", "Preview could not be extracted in the browser. The server will still parse this file during diagnosis.");
+            return;
+          }
+        }
+
+        renderTextPreview(file.name, extension.toUpperCase() || "FILE", "Preview is not available for this file type in the browser, but the server will still parse it during diagnosis.");
+      }
+    });
+  }
+
+  if (form && overlay) {
+    form.addEventListener("submit", () => {
+      overlay.classList.add("active");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+</script>
+{% endblock %}

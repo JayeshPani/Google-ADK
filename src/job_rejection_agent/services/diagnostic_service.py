@@ -17,7 +17,7 @@ from job_rejection_agent.coaching import (
 )
 from job_rejection_agent.config import Settings, get_settings
 from job_rejection_agent.domain import DiagnosticReport, JobRequirements, ResumeFacts, SavedJobPacket
-from job_rejection_agent.google_models import is_resource_exhausted_error
+from job_rejection_agent.google_models import build_google_genai_client, is_resource_exhausted_error
 from job_rejection_agent.ingestion import parse_job_description, parse_rejection_notes, parse_resume_file
 from job_rejection_agent.persistence import JobTracker, build_packet_repository
 
@@ -52,7 +52,7 @@ class GeminiAugmenter:
 
     @property
     def available(self) -> bool:
-        return bool(self.settings.google_api_key)
+        return self.settings.google_genai_enabled
 
     def _extract_json(self, text: str) -> dict[str, Any] | None:
         match = re.search(r"\{.*\}", text, flags=re.DOTALL)
@@ -67,10 +67,9 @@ class GeminiAugmenter:
         if not self.available:
             return None
         try:
-            from google import genai
+            client = build_google_genai_client(self.settings)
         except ImportError:
             return None
-        client = genai.Client(api_key=self.settings.google_api_key)
         for model_id in self.settings.generation_model_candidates:
             try:
                 response = client.models.generate_content(

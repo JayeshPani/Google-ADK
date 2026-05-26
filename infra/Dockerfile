@@ -22,4 +22,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "-m", "streamlit", "run", "app/streamlit_app.py", "--server.port", "8080", "--server.address", "0.0.0.0"]
+CMD ["python", "-m", "uvicorn", "app.web_app:app", "--host", "0.0.0.0", "--port", "8080"]

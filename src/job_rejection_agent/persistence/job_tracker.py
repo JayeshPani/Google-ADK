@@ -19,6 +19,12 @@ class JobTracker:
     def get(self, packet_id: str) -> SavedJobPacket | None:
         return self.repository.load_packet(packet_id)
 
+    def find_by_session(self, user_id: str, session_id: str) -> SavedJobPacket | None:
+        for packet in self.repository.list_packets(user_id):
+            if packet.session_id == session_id:
+                return packet
+        return None
+
     def list_entries(self, user_id: str) -> list[TrackerEntry]:
         return [
             TrackerEntry(
@@ -32,4 +38,3 @@ class JobTracker:
             )
             for packet in self.repository.list_packets(user_id)
         ]
-

@@ -77,6 +77,18 @@ class Settings:
     def evaluation_model_candidates(self) -> tuple[str, ...]:
         return dedupe_model_ids((self.eval_model_id,), self.eval_model_fallbacks, self.model_fallbacks)
 
+    @property
+    def google_genai_backend(self) -> str:
+        return "vertexai" if self.google_genai_use_vertexai else "google_ai_studio"
+
+    @property
+    def google_genai_enabled(self) -> bool:
+        if self.google_genai_use_vertexai:
+            has_vertex_project = bool(self.google_cloud_project and self.google_cloud_location)
+            has_express_key = bool(self.google_api_key and self.google_cloud_location)
+            return has_vertex_project or has_express_key
+        return bool(self.google_api_key)
+
 
 def _read_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -125,7 +137,7 @@ def get_settings() -> Settings:
     load_dotenv()
     LOCAL_DIR.mkdir(exist_ok=True)
     PROMPT_HISTORY_DIR.mkdir(exist_ok=True)
-    google_api_key = os.getenv("GOOGLE_API_KEY")
+    google_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_API_KEY")
     phoenix_api_key = os.getenv("PHOENIX_API_KEY")
     phoenix_base_url = os.getenv("PHOENIX_BASE_URL", "https://app.phoenix.arize.com")
     phoenix_collector_endpoint = os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "https://app.phoenix.arize.com")

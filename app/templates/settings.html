@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | Refine{% endblock %}
+
+{% block content %}
+<main class="flex-1 w-full max-w-5xl mx-auto px-6 py-12 md:py-20">
+  <header class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+    <div class="space-y-2">
+      <h1 class="text-4xl font-medium">Observability & Prompt Improvement</h1>
+      <p class="text-gray-500">Trace health, runtime configuration, and the guarded self-improvement loop.</p>
+    </div>
+    <form method="post" action="/settings/improve">
+      <button type="submit" class="px-8 py-4 bg-[#6B8E83] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 hover:bg-[#5A7A70] transition-all">
+        Run Improvement Loop
+      </button>
+    </form>
+  </header>
+
+  <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
+    <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4]">
+      <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">ADK Runtime</div>
+      <div class="text-2xl font-semibold">{{ "Live" if runtime_status.adk_enabled else "Fallback" }}</div>
+    </div>
+    <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4]">
+      <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Model Chain</div>
+      <div class="text-sm font-medium">{{ runtime_status.model_chain|join(", ") }}</div>
+    </div>
+    <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4]">
+      <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Phoenix Project</div>
+      <div class="text-sm font-medium">{{ runtime_status.phoenix_project }}</div>
+    </div>
+  </section>
+
+  <section class="bg-white rounded-[32px] border border-[#EBE9E4] p-8 md:p-10 space-y-8">
+    <div class="space-y-2">
+      <h2 class="text-3xl font-medium">Guarded Promotion Gate</h2>
+      <p class="text-gray-500">Candidate prompts are only promoted if held-out live runs improve without regressing any guarded metric.</p>
+    </div>
+
+    {% if improvement_run %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div class="p-6 rounded-3xl border border-[#EBE9E4] bg-[#F9F8F6]">
+        <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Promotion</div>
+        <div class="text-2xl font-semibold {{ 'text-emerald-700' if improvement_run.promoted else 'text-amber-700' }}">
+          {{ "Promoted" if improvement_run.promoted else "Not promoted" }}
+        </div>
+        <p class="text-sm text-gray-500 mt-4">{{ improvement_run.analysis }}</p>
+      </div>
+      <div class="p-6 rounded-3xl border border-[#EBE9E4] bg-[#F9F8F6]">
+        <div class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Source Spans</div>
+        <div class="text-sm text-gray-600">{{ improvement_run.source_span_ids|length }} trace-backed cases contributed to this run.</div>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div>
+        <h3 class="text-xl font-medium mb-4">Baseline Scores</h3>
+        <div class="space-y-3">
+          {% for key, value in improvement_run.baseline_scores.items() %}
+          <div class="flex items-center justify-between px-4 py-3 border border-[#EBE9E4] rounded-2xl">
+            <span class="text-sm text-gray-500">{{ key }}</span>
+            <span class="font-semibold">{{ value }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <h3 class="text-xl font-medium mb-4">Candidate Scores</h3>
+        <div class="space-y-3">
+          {% for key, value in improvement_run.candidate_scores.items() %}
+          <div class="flex items-center justify-between px-4 py-3 border border-[#EBE9E4] rounded-2xl">
+            <span class="text-sm text-gray-500">{{ key }}</span>
+            <span class="font-semibold">{{ value }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="p-8 rounded-3xl border border-dashed border-[#EBE9E4] text-center text-gray-500">
+      No improvement run yet. Trigger the loop to evaluate a candidate prompt against held-out live runs.
+    </div>
+    {% endif %}
+
+    <div>
+      <h3 class="text-xl font-medium mb-4">Candidate Prompt Preview</h3>
+      <textarea class="w-full h-72 px-4 py-3 rounded-2xl border border-[#EBE9E4] bg-[#FDFCF9] text-sm text-gray-600 resize-none" readonly>{{ candidate_prompt }}</textarea>
+    </div>
+  </section>
+</main>
+{% endblock %}
+

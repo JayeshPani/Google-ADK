@@ -80,6 +80,30 @@ class ConfigTests(unittest.TestCase):
             ("gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"),
         )
 
+    def test_google_genai_enabled_supports_google_ai_studio_and_vertex(self) -> None:
+        studio_settings = config.Settings(
+            google_api_key="studio-key",
+            google_genai_use_vertexai=False,
+        )
+        vertex_settings = config.Settings(
+            google_api_key=None,
+            google_genai_use_vertexai=True,
+            google_cloud_project="demo-project",
+            google_cloud_location="us-central1",
+        )
+        invalid_vertex_settings = config.Settings(
+            google_api_key=None,
+            google_genai_use_vertexai=True,
+            google_cloud_project=None,
+            google_cloud_location="us-central1",
+        )
+
+        self.assertTrue(studio_settings.google_genai_enabled)
+        self.assertEqual(studio_settings.google_genai_backend, "google_ai_studio")
+        self.assertTrue(vertex_settings.google_genai_enabled)
+        self.assertEqual(vertex_settings.google_genai_backend, "vertexai")
+        self.assertFalse(invalid_vertex_settings.google_genai_enabled)
+
 
 if __name__ == "__main__":
     unittest.main()

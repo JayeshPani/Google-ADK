@@ -1,0 +1,21 @@
+<header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-[#EBE9E4] px-6 py-4 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <div class="w-8 h-8 bg-[#6B8E83] rounded-lg flex items-center justify-center">
+      <iconify-icon icon="lucide:layers" class="text-white text-xl"></iconify-icon>
+    </div>
+    <a href="/" class="text-xl font-semibold tracking-tight serif">Refine</a>
+  </div>
+  <nav class="hidden md:flex items-center gap-8 text-sm font-medium">
+    <a href="/" class="{{ 'text-gray-900' if active_item == 'diagnose' else 'text-gray-500 hover:text-[#6B8E83]' }} transition-colors">New Diagnosis</a>
+    <a href="/history" class="{{ 'text-gray-900' if active_item == 'history' else 'text-gray-500 hover:text-[#6B8E83]' }} transition-colors">History</a>
+    <a href="/settings" class="{{ 'text-gray-700' if active_item == 'settings' else 'text-gray-400 hover:text-gray-600' }} transition-colors">
+      <iconify-icon icon="lucide:settings" class="text-lg"></iconify-icon>
+    </a>
+  </nav>
+  <div class="flex items-center gap-4">
+    <div class="text-sm px-4 py-2 border border-[#EBE9E4] rounded-full bg-white">
+      {{ user_label }}
+    </div>
+  </div>
+</header>
+

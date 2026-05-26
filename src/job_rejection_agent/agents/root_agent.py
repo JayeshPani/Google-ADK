@@ -10,7 +10,7 @@ from typing import Any
 import uuid
 
 from job_rejection_agent.config import Settings, get_settings
-from job_rejection_agent.google_models import is_resource_exhausted_error
+from job_rejection_agent.google_models import apply_google_genai_environment, is_resource_exhausted_error
 from job_rejection_agent.observability import (
     configure_tracing,
     evaluate_packet,
@@ -85,15 +85,17 @@ class AgentRuntime:
 
     def adk_available(self) -> bool:
         try:
+            apply_google_genai_environment(self.settings)
             import google.adk  # noqa: F401
             import google.genai  # noqa: F401
-            return bool(self.settings.google_api_key and self.settings.generation_model_candidates)
+            return bool(self.settings.google_genai_enabled and self.settings.generation_model_candidates)
         except Exception:
             return False
 
     def build_agent(self, *, prompt_text_override: str | None = None, model_override: str | None = None):
         from google.adk.agents import LlmAgent
 
+        apply_google_genai_environment(self.settings)
         prompt = prompt_text_override or Path(self.settings.prompt_path).read_text(encoding="utf-8")
         instruction = prompt.rstrip() + "\n\nSpecialist guidance:\n" + compose_specialist_context()
         return LlmAgent(
@@ -207,6 +209,7 @@ class AgentRuntime:
         session_id = str(uuid.uuid4())
         root_span_id = None
         trace_ids: dict[str, str] = {}
+        apply_google_genai_environment(self.settings)
         tracing_enabled = configure_tracing(self.settings)
         model_candidates = self.settings.generation_model_candidates
         span_context_manager = nullcontext(None)
@@ -295,9 +298,21 @@ class AgentRuntime:
                 if selected_model:
                     if root_span is not None:
                         root_span.set_attribute("job_rejection.selected_model", selected_model)
-                    packet_candidates = self.service.tracker.list_entries(user_id)
-                    packet_id = packet_candidates[0].packet_id if packet_candidates else ""
-                    packet = self.service.tracker.get(packet_id) if packet_id else None
+                    packet = self.service.tracker.find_by_session(user_id, session_id)
+                    if packet is None:
+                        if root_span is not None:
+                            root_span.set_attribute("job_rejection.adk_fallback_reason", "missing_saved_packet")
+                        used_adk = False
+                        result = self.service.diagnose(
+                            resume_path=resume_path,
+                            jd_text=jd_text,
+                            rejection_notes=rejection_notes,
+                            user_id=user_id,
+                            session_id=session_id,
+                            persist=True,
+                        )
+                        packet = result.packet
+                        final_text = render_packet_markdown(result.packet)
                 else:
                     if root_span is not None:
                         root_span.set_attribute("job_rejection.selected_model", "deterministic-fallback")

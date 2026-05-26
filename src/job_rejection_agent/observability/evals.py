@@ -6,7 +6,7 @@ from typing import Any
 
 from job_rejection_agent.config import Settings, get_settings
 from job_rejection_agent.domain import SavedJobPacket
-from job_rejection_agent.google_models import is_resource_exhausted_error
+from job_rejection_agent.google_models import apply_google_genai_environment, is_resource_exhausted_error
 from .tracing import apply_phoenix_environment
 
 
@@ -105,10 +105,11 @@ def evaluate_packet(
 ) -> dict[str, Any]:
     settings = settings or get_settings()
     heuristic = _heuristic_eval(packet)
-    if not settings.google_api_key or not settings.phoenix_api_key:
+    if not settings.google_genai_enabled or not settings.phoenix_api_key:
         return heuristic
     if not span_id:
         return heuristic
+    apply_google_genai_environment(settings)
     apply_phoenix_environment(settings)
     try:
         import pandas as pd

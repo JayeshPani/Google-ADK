@@ -26,7 +26,9 @@ def get_live_network_test_skip_reason(settings: Settings | None = None) -> str |
     enabled = os.getenv("RUN_LIVE_NETWORK_TESTS", "").strip().lower() in {"1", "true", "yes", "on"}
     if not enabled:
         return "Set RUN_LIVE_NETWORK_TESTS=1 to run live Gemini/Phoenix/MCP integration tests."
-    if not settings.google_api_key:
+    if not settings.google_genai_enabled:
+        if settings.google_genai_use_vertexai:
+            return "Configure Vertex AI with GOOGLE_GENAI_USE_VERTEXAI=true, GOOGLE_CLOUD_PROJECT, and GOOGLE_CLOUD_LOCATION."
         return "GOOGLE_API_KEY is required for live ADK integration tests."
     if not settings.phoenix_api_key:
         return "PHOENIX_API_KEY is required for live Phoenix integration tests."

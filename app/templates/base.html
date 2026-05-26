@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Refine{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <link href="https://api.fontshare.com/v2/css?f[]=gambetta@400,500,600&f[]=satoshi@300,400,500,700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --warm-bg: #fdfcf9;
+        --warm-card: #ffffff;
+        --sage: #6b8e83;
+        --sage-hover: #5a7a70;
+        --warm-gray: #4a4540;
+        --border: #ebe9e4;
+      }
+      body {
+        font-family: "Satoshi", sans-serif;
+        background-color: var(--warm-bg);
+        color: var(--warm-gray);
+        scroll-behavior: smooth;
+      }
+      h1, h2, h3, h4, .serif {
+        font-family: "Gambetta", serif;
+      }
+      .badge-apply-now {
+        background-color: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+      }
+      .badge-patch {
+        background-color: #fff9ed;
+        color: #92400e;
+        border: 1px solid #ffe7b8;
+      }
+      .badge-defer {
+        background-color: #f9fafb;
+        color: #374151;
+        border: 1px solid #e5e7eb;
+      }
+      .badge-not-fit {
+        background-color: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+      }
+      .edit-placeholder {
+        color: var(--sage);
+        font-weight: 700;
+        background-color: #f0f4f2;
+        padding: 0 4px;
+        border-radius: 4px;
+        border: 1px dashed var(--sage);
+      }
+      .diff-add {
+        background-color: #ecfdf5;
+        color: #065f46;
+        padding: 0 2px;
+        border-radius: 2px;
+      }
+      .priority-high {
+        background-color: #f0f4f2;
+        color: var(--sage);
+        border: 1px solid rgba(107, 142, 131, 0.2);
+      }
+      .priority-medium {
+        background-color: #f5f3f0;
+        color: var(--warm-gray);
+        border: 1px solid var(--border);
+      }
+      .step-number {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background-color: var(--sage);
+        color: white;
+        font-size: 0.875rem;
+      }
+      .timeline-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        background: white;
+        position: relative;
+        z-index: 10;
+      }
+      .timeline-dot.active {
+        background: var(--sage);
+        border-color: var(--sage);
+      }
+      .timeline-line {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--border);
+        transform: translateY(-50%);
+        z-index: 0;
+      }
+      details[open] summary iconify-icon {
+        transform: rotate(180deg);
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+    </style>
+    {% block head_extra %}{% endblock %}
+  </head>
+  <body>
+    <div class="min-h-screen flex flex-col relative">
+      {% include "partials/header.html" %}
+      {% block content %}{% endblock %}
+      {% include "partials/footer.html" %}
+    </div>
+    {% block scripts %}{% endblock %}
+  </body>
+  </html>
+

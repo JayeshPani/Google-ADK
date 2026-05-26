@@ -12,7 +12,7 @@ from typing import Any
 
 from job_rejection_agent.config import Settings, get_settings
 from job_rejection_agent.domain import ImprovementRun
-from job_rejection_agent.google_models import is_resource_exhausted_error
+from job_rejection_agent.google_models import build_google_genai_client, is_resource_exhausted_error
 
 from .live_verifier import REQUIRED_ANNOTATION_NAMES, get_live_network_test_skip_reason, wait_for_trace_readback
 from .phoenix_mcp import query_low_scoring_trace_summaries
@@ -78,13 +78,12 @@ class PromptOptimizer:
         return summary, explanations[:5]
 
     def _call_llm(self, prompt: str) -> str | None:
-        if not self.settings.google_api_key:
+        if not self.settings.google_genai_enabled:
             return None
         try:
-            from google import genai
+            client = build_google_genai_client(self.settings)
         except ImportError:
             return None
-        client = genai.Client(api_key=self.settings.google_api_key)
         for model_id in self.settings.generation_model_candidates:
             try:
                 response = client.models.generate_content(

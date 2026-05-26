@@ -46,8 +46,7 @@ class RootAgentModelFallbackTests(unittest.TestCase):
         packet = self._build_packet()
         settings = self._settings()
         tracker = types.SimpleNamespace(
-            list_entries=mock.Mock(return_value=[types.SimpleNamespace(packet_id=packet.packet_id)]),
-            get=mock.Mock(return_value=packet),
+            find_by_session=mock.Mock(return_value=packet),
         )
         service = types.SimpleNamespace(tracker=tracker, diagnose=mock.Mock())
         runtime = AgentRuntime(settings=settings, service=service)
@@ -83,12 +82,51 @@ class RootAgentModelFallbackTests(unittest.TestCase):
         self.assertEqual(result["packet_id"], packet.packet_id)
         service.diagnose.assert_not_called()
 
+    def test_run_diagnostic_uses_secondary_model_after_primary_unavailable_error(self) -> None:
+        packet = self._build_packet()
+        settings = self._settings()
+        tracker = types.SimpleNamespace(
+            find_by_session=mock.Mock(return_value=packet),
+        )
+        service = types.SimpleNamespace(tracker=tracker, diagnose=mock.Mock())
+        runtime = AgentRuntime(settings=settings, service=service)
+        session_service = types.SimpleNamespace(
+            get_session=mock.AsyncMock(return_value=None),
+            create_session=mock.AsyncMock(return_value=None),
+            delete_session=mock.AsyncMock(return_value=None),
+        )
+        attempts: list[str] = []
+
+        async def fake_attempt(**kwargs):
+            attempts.append(kwargs["model_id"])
+            if kwargs["model_id"] == "gemini-primary":
+                raise RuntimeError("503 UNAVAILABLE. This model is currently experiencing high demand.")
+            return "ADK final response"
+
+        with (
+            mock.patch.object(runtime, "adk_available", return_value=True),
+            mock.patch("job_rejection_agent.agents.root_agent.create_session_service", return_value=session_service),
+            mock.patch.object(runtime, "_reset_adk_session", new=mock.AsyncMock(return_value=None)),
+            mock.patch.object(runtime, "_run_adk_attempt", side_effect=fake_attempt),
+        ):
+            result = runtime.run_diagnostic(
+                resume_path=str(FIXTURE_ROOT / "fixtures" / "resumes" / "arjun_backend_student.txt"),
+                jd_text=(FIXTURE_ROOT / "fixtures" / "jds" / "backend_newgrad.md").read_text(encoding="utf-8"),
+                rejection_notes="Need stronger API ownership evidence.",
+                user_id="test-user",
+            )
+
+        self.assertEqual(attempts, ["gemini-primary", "gemini-secondary"])
+        self.assertTrue(result["used_adk"])
+        self.assertEqual(result["text"], "ADK final response")
+        self.assertEqual(result["packet_id"], packet.packet_id)
+        service.diagnose.assert_not_called()
+
     def test_run_diagnostic_falls_back_to_deterministic_when_all_models_exhausted(self) -> None:
         packet = self._build_packet()
         settings = self._settings()
         tracker = types.SimpleNamespace(
-            list_entries=mock.Mock(return_value=[]),
-            get=mock.Mock(return_value=None),
+            find_by_session=mock.Mock(return_value=None),
         )
         diagnose_result = types.SimpleNamespace(packet=packet)
         service = types.SimpleNamespace(tracker=tracker, diagnose=mock.Mock(return_value=diagnose_result))
@@ -107,6 +145,37 @@ class RootAgentModelFallbackTests(unittest.TestCase):
             mock.patch("job_rejection_agent.agents.root_agent.create_session_service", return_value=session_service),
             mock.patch.object(runtime, "_reset_adk_session", new=mock.AsyncMock(return_value=None)),
             mock.patch.object(runtime, "_run_adk_attempt", side_effect=exhausted_attempt),
+        ):
+            result = runtime.run_diagnostic(
+                resume_path=str(FIXTURE_ROOT / "fixtures" / "resumes" / "arjun_backend_student.txt"),
+                jd_text=(FIXTURE_ROOT / "fixtures" / "jds" / "backend_newgrad.md").read_text(encoding="utf-8"),
+                rejection_notes="Need stronger API ownership evidence.",
+                user_id="test-user",
+            )
+
+        self.assertFalse(result["used_adk"])
+        self.assertEqual(result["packet_id"], packet.packet_id)
+        self.assertEqual(result["text"], render_packet_markdown(packet))
+        service.diagnose.assert_called_once()
+
+    def test_run_diagnostic_falls_back_when_adk_does_not_persist_current_session_packet(self) -> None:
+        packet = self._build_packet()
+        settings = self._settings()
+        tracker = types.SimpleNamespace(find_by_session=mock.Mock(return_value=None))
+        diagnose_result = types.SimpleNamespace(packet=packet)
+        service = types.SimpleNamespace(tracker=tracker, diagnose=mock.Mock(return_value=diagnose_result))
+        runtime = AgentRuntime(settings=settings, service=service)
+        session_service = types.SimpleNamespace(
+            get_session=mock.AsyncMock(return_value=None),
+            create_session=mock.AsyncMock(return_value=None),
+            delete_session=mock.AsyncMock(return_value=None),
+        )
+
+        with (
+            mock.patch.object(runtime, "adk_available", return_value=True),
+            mock.patch("job_rejection_agent.agents.root_agent.create_session_service", return_value=session_service),
+            mock.patch.object(runtime, "_reset_adk_session", new=mock.AsyncMock(return_value=None)),
+            mock.patch.object(runtime, "_run_adk_attempt", new=mock.AsyncMock(return_value="ADK final response")),
         ):
             result = runtime.run_diagnostic(
                 resume_path=str(FIXTURE_ROOT / "fixtures" / "resumes" / "arjun_backend_student.txt"),

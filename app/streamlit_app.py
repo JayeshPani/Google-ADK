@@ -244,6 +244,14 @@ def persist_uploaded_file(uploaded_file) -> Path:
         return Path(handle.name)
 
 
+def resolve_resume_path(uploaded_file, demo_resume_path: Path | None) -> tuple[Path, str]:
+    if uploaded_file is not None:
+        return persist_uploaded_file(uploaded_file), "uploaded"
+    if demo_resume_path is not None:
+        return demo_resume_path, "demo"
+    raise ValueError("No resume source provided.")
+
+
 def sidebar(runtime: AgentRuntime) -> None:
     st.sidebar.markdown("### Session")
     st.sidebar.code(get_user_id())
@@ -279,6 +287,8 @@ def main() -> None:
             if demo_case != "None":
                 _, jd_text_default, demo_resume_path = load_demo_case(demo_case)
                 st.caption(f"Loaded seeded case: `{demo_resume_path.name}`")
+            if uploaded_file is not None and demo_resume_path is not None:
+                st.info("Using the uploaded resume. The seeded demo case only prefills the job description.")
             jd_text = st.text_area("Paste job description", height=260, value=jd_text_default)
             rejection_notes = st.text_area("Optional recruiter or rejection notes", height=120)
             run_clicked = st.button("Run diagnostic", type="primary", use_container_width=True)
@@ -306,7 +316,7 @@ def main() -> None:
             elif not uploaded_file and demo_resume_path is None:
                 st.error("Upload a resume or choose a seeded demo case.")
             else:
-                resume_path = demo_resume_path or persist_uploaded_file(uploaded_file)
+                resume_path, _ = resolve_resume_path(uploaded_file, demo_resume_path)
                 with st.spinner("Diagnosing rejection pattern..."):
                     result = runtime.run_diagnostic(
                         resume_path=str(resume_path),
@@ -320,6 +330,7 @@ def main() -> None:
         result = st.session_state.get("last_result")
         if result:
             packet = result["packet"]
+            st.caption(f"Analyzed resume: `{packet.resume_name}`")
             render_metrics(packet)
             st.markdown("### Rejection drivers")
             render_gap_cards(packet)

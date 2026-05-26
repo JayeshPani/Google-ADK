@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Saved Analyses | Refine{% endblock %}
+
+{% block content %}
+<main class="flex-1 w-full max-w-5xl mx-auto px-6 py-12 md:py-20">
+  <header class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+    <div class="space-y-2">
+      <h1 class="text-4xl font-medium">Saved Analyses</h1>
+      <p class="text-gray-500">Track your progress across applications and refine your evidence strategy.</p>
+    </div>
+    <form method="get" action="/history" class="flex items-center gap-3">
+      <div class="relative">
+        <select name="sort" class="appearance-none bg-white border border-[#EBE9E4] rounded-xl px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B8E83]/20 transition-all cursor-pointer font-medium">
+          <option value="newest" {% if sort_order == "newest" %}selected{% endif %}>Sort by: Newest First</option>
+          <option value="highest" {% if sort_order == "highest" %}selected{% endif %}>Sort by: Highest Match</option>
+          <option value="alphabetical" {% if sort_order == "alphabetical" %}selected{% endif %}>Sort by: Alphabetical</option>
+        </select>
+        <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+          <iconify-icon icon="lucide:chevron-down"></iconify-icon>
+        </div>
+      </div>
+      <div class="relative">
+        <select name="status" class="appearance-none bg-white border border-[#EBE9E4] rounded-xl px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#6B8E83]/20 transition-all cursor-pointer font-medium">
+          <option value="all" {% if status_filter == "all" %}selected{% endif %}>Filter: All Status</option>
+          <option value="apply_now" {% if status_filter == "apply_now" %}selected{% endif %}>Apply Now</option>
+          <option value="apply_after_patch" {% if status_filter == "apply_after_patch" %}selected{% endif %}>Apply After Patch</option>
+          <option value="defer" {% if status_filter == "defer" %}selected{% endif %}>Defer</option>
+          <option value="not_fit" {% if status_filter == "not_fit" %}selected{% endif %}>Not Fit</option>
+        </select>
+        <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+          <iconify-icon icon="lucide:filter"></iconify-icon>
+        </div>
+      </div>
+      <button type="submit" class="px-4 py-2.5 bg-[#6B8E83] text-white rounded-xl text-sm font-semibold">Apply</button>
+    </form>
+  </header>
+
+  <section class="space-y-6">
+    {% for entry in entries %}
+    {% set meta = decision_meta(entry.status) %}
+    {% set entry_packet = entry_packets.get(entry.packet_id) %}
+    <div class="bg-white border border-[#EBE9E4] rounded-[24px] overflow-hidden hover:shadow-md transition-shadow group">
+      <div class="p-6 md:p-8 flex flex-col md:flex-row items-center gap-8">
+        <div class="flex-1 flex items-start gap-6">
+          <div class="w-16 h-16 rounded-2xl bg-gray-50 border border-[#EBE9E4] flex items-center justify-center shrink-0 text-lg font-semibold text-[#6B8E83]">
+            {{ company_initials(entry) }}
+          </div>
+          <div class="space-y-1">
+            <div class="flex items-center gap-3">
+              <h2 class="text-xl font-semibold">{{ entry.company_name or "Target company" }}</h2>
+              <span class="{{ meta.badge_class }} text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">{{ meta.label }}</span>
+            </div>
+            <p class="text-lg text-gray-500">{{ entry.role_title }}</p>
+            <div class="flex items-center gap-4 text-xs text-gray-400 font-medium">
+              <span class="flex items-center gap-1"><iconify-icon icon="lucide:file-text"></iconify-icon>{{ entry_packet.resume_name if entry_packet else "Saved packet" }}</span>
+              <span class="flex items-center gap-1"><iconify-icon icon="lucide:calendar"></iconify-icon>{{ entry.updated_at[:10] }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-12 shrink-0">
+          <div class="text-center">
+            <div class="text-3xl font-semibold tracking-tight">{{ "%.1f"|format(entry.score_overall) }}/10</div>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Match Score</div>
+          </div>
+          <div class="flex items-center gap-3">
+            <a href="/history?packet_id={{ entry.packet_id }}&status={{ status_filter }}&sort={{ sort_order }}" class="px-6 py-2.5 bg-[#6B8E83] text-white rounded-xl text-sm font-semibold hover:bg-[#5A7A70] transition-colors">View Analysis</a>
+            <a href="/patch/{{ entry.packet_id }}" class="p-2.5 border border-[#EBE9E4] text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-all">
+              <iconify-icon icon="lucide:arrow-up-right" class="text-lg"></iconify-icon>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="bg-white border border-[#EBE9E4] rounded-[24px] p-10 text-center text-gray-500">
+      No saved packets yet. Run a diagnosis first.
+    </div>
+    {% endfor %}
+  </section>
+
+  {% if selected_packet %}
+  <section class="mt-16 bg-[#F5F3F0] rounded-[32px] p-8 md:p-12 border border-[#EBE9E4]">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-10">
+      <div class="max-w-md space-y-4">
+        <h3 class="text-2xl font-medium">{{ selected_packet.job_requirements.role_title }} at {{ selected_packet.job_requirements.company_name }}</h3>
+        <p class="text-gray-500">{{ selected_packet.report.narrative_summary }}</p>
+      </div>
+      <div class="flex flex-col md:flex-row gap-4">
+        <a href="/?packet_id={{ selected_packet.packet_id }}" class="px-10 py-4 bg-[#6B8E83] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 hover:bg-[#5A7A70] transition-all transform active:scale-95">Open Results</a>
+        <a href="/patch/{{ selected_packet.packet_id }}" class="px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50">Patch Details</a>
+        <a href="/plan/{{ selected_packet.packet_id }}" class="px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50">Action Plan</a>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

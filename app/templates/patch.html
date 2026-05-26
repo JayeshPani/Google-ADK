@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Patch Details | Refine{% endblock %}
+
+{% block head_extra %}
+<style>
+  .sticky-nav {
+    position: sticky;
+    top: 73px;
+    z-index: 30;
+  }
+  section {
+    scroll-margin-top: 140px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="flex-1 w-full max-w-6xl mx-auto px-6 py-8 md:py-12">
+  <div class="flex flex-col gap-8">
+    <nav class="flex items-center gap-2 text-sm text-gray-400">
+      <a href="/?packet_id={{ packet.packet_id }}" class="hover:text-[#6B8E83] transition-colors">Analysis</a>
+      <iconify-icon icon="lucide:chevron-right"></iconify-icon>
+      <span class="text-gray-900 font-medium">Patch Details</span>
+    </nav>
+
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div class="space-y-2">
+        <h1 class="text-4xl md:text-5xl font-medium">Resume Patch Plan</h1>
+        <p class="text-lg text-gray-500">Evidence-based refinements for <span class="text-gray-900 font-medium italic">{{ packet.job_requirements.role_title }}</span> at <span class="text-gray-900 font-medium">{{ packet.job_requirements.company_name }}</span></p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button id="btn-copy-all" class="px-6 py-3 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-xl font-semibold shadow-lg shadow-[#6B8E83]/10 transition-all flex items-center gap-2">
+          <iconify-icon icon="lucide:copy"></iconify-icon> Copy All Edits
+        </button>
+        <a href="/patch/{{ packet.packet_id }}/download" class="px-6 py-3 bg-white border border-[#EBE9E4] text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-all flex items-center gap-2">
+          <iconify-icon icon="lucide:download"></iconify-icon> Export Patch Notes
+        </a>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-[32px] border border-[#EBE9E4] p-6 flex flex-wrap items-center gap-8 shadow-sm">
+      <div class="flex items-center gap-4 border-r border-[#EBE9E4] pr-8">
+        <div class="px-4 py-2 rounded-full {{ packet_meta.badge_class }} text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+          <iconify-icon icon="lucide:alert-circle"></iconify-icon> {{ packet_meta.label }}
+        </div>
+      </div>
+      <div class="flex gap-6">
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Overall Score</span>
+          <span class="text-xl font-semibold">{{ "%.1f"|format(packet.report.score_overall) }}/10</span>
+        </div>
+        <div class="flex flex-col">
+          <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Targeted Gap</span>
+          <span class="text-xl font-semibold">{{ packet.report.top_gaps[0].title if packet.report.top_gaps else "Evidence strength" }}</span>
+        </div>
+      </div>
+      <div class="ml-auto flex items-center gap-2 text-xs font-medium text-[#6B8E83]">
+        <iconify-icon icon="lucide:check-circle"></iconify-icon>
+        <span>Analyzing against {{ packet.report.matched_skills|length + packet.report.missing_skills|length }} core skill signals</span>
+      </div>
+    </div>
+
+    <div class="sticky-nav bg-[#FDFCF9]/95 backdrop-blur-md py-4 border-b border-[#EBE9E4] mb-8">
+      <div class="flex items-center justify-between">
+        <nav class="flex gap-8">
+          {% for section_name in ["summary", "experience", "project", "skills", "education"] %}
+            {% if patch_sections.get(section_name) %}
+            <a href="#{{ section_name }}-section" class="text-sm font-bold uppercase tracking-widest {% if loop.first %}text-[#6B8E83] border-b-2 border-[#6B8E83]{% else %}text-gray-400 hover:text-[#6B8E83]{% endif %} pb-2 transition-all">{{ section_name }}</a>
+            {% endif %}
+          {% endfor %}
+        </nav>
+        <a href="/plan/{{ packet.packet_id }}" class="text-xs text-[#6B8E83] font-semibold uppercase tracking-wider hover:underline">Proceed to action plan</a>
+      </div>
+    </div>
+
+    <div class="space-y-20 pb-20">
+      {% for section_name, edits in patch_sections.items() %}
+      <section id="{{ section_name }}-section" class="space-y-6">
+        <div class="flex items-center gap-4">
+          <h2 class="text-3xl font-medium">{{ section_name|title }}</h2>
+          <span class="px-2 py-1 rounded bg-[#F0F4F2] text-[#6B8E83] text-[10px] font-bold uppercase tracking-tighter">{{ edits|length }} Patch{{ "" if edits|length == 1 else "es" }} Available</span>
+        </div>
+        <div class="space-y-8">
+          {% for edit in edits %}
+          <div class="bg-white rounded-3xl border border-[#EBE9E4] overflow-hidden shadow-sm">
+            <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x border-[#EBE9E4]">
+              <div class="p-8 bg-[#F9F8F6]">
+                <div class="flex justify-between items-start mb-4">
+                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Current Resume</span>
+                  <iconify-icon icon="lucide:trash-2" class="text-gray-300"></iconify-icon>
+                </div>
+                <p class="text-gray-500 italic leading-relaxed">{{ edit.original_text }}</p>
+              </div>
+              <div class="p-8 relative">
+                <div class="flex justify-between items-start mb-4">
+                  <span class="text-[10px] font-bold text-[#6B8E83] uppercase tracking-widest">Refined Patch</span>
+                  <iconify-icon icon="lucide:copy" class="text-[#6B8E83]"></iconify-icon>
+                </div>
+                <p class="text-gray-900 leading-relaxed font-medium">{{ edit.rewritten_text }}</p>
+              </div>
+            </div>
+            <div class="bg-gray-50 p-6 border-t border-[#EBE9E4] flex flex-col md:flex-row gap-6 md:items-center">
+              <div class="flex-1 space-y-2">
+                <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
+                  <iconify-icon icon="lucide:help-circle" class="text-[#6B8E83]"></iconify-icon> Why this edit?
+                </div>
+                <p class="text-sm text-gray-600">{{ edit.reason }}</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                {% for note in packet.report.provenance[:2] %}
+                <span class="px-3 py-1 bg-white border border-[#EBE9E4] rounded-full text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{{ note.source }}: {{ note.label }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+
+      <div class="pt-12 flex flex-col items-center gap-8">
+        <div class="w-full max-w-2xl text-center space-y-4">
+          <h3 class="text-3xl font-medium italic serif">Ready to apply?</h3>
+          <p class="text-gray-500">Applying these edits strengthens the evidence story before your next application cycle.</p>
+        </div>
+        <div class="flex items-center gap-4">
+          <a href="/plan/{{ packet.packet_id }}" class="px-10 py-4 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 transition-all transform hover:scale-105 active:scale-95">Proceed to Action Plan</a>
+          <a href="/history?packet_id={{ packet.packet_id }}" class="px-10 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50">Save to History</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <textarea id="copy-source" class="hidden">{{ copy_blob }}</textarea>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const copyButton = document.getElementById("btn-copy-all");
+  const copySource = document.getElementById("copy-source");
+  if (copyButton && copySource) {
+    copyButton.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(copySource.value);
+      copyButton.innerHTML = '<iconify-icon icon="lucide:check"></iconify-icon> Copied';
+    });
+  }
+</script>
+{% endblock %}
+
