@@ -86,6 +86,10 @@ class ViewerContext:
     should_set_guest_cookie: bool
 
 
+def _static_path(path: str) -> str:
+    return f"/static/{path.lstrip('/')}"
+
+
 def _decision_meta(decision: str) -> dict[str, str]:
     mapping = {
         "apply_now": {"label": "Apply Now", "badge_class": "badge-apply-now", "tone_class": "text-emerald-700"},
@@ -494,7 +498,7 @@ def create_app(
     auth_service = AuthService(settings=settings, tracker=runtime.service.tracker)
     app = FastAPI(title="Refine")
     app.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
-    TEMPLATES.env.globals["static_path"] = lambda path: app.url_path_for("static", path=path)
+    TEMPLATES.env.globals["static_path"] = _static_path
     app.state.settings = settings
     app.state.runtime = runtime
     app.state.optimizer = optimizer
