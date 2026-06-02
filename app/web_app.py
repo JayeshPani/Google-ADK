@@ -494,6 +494,7 @@ def create_app(
     auth_service = AuthService(settings=settings, tracker=runtime.service.tracker)
     app = FastAPI(title="Refine")
     app.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
+    TEMPLATES.env.globals["static_path"] = lambda path: app.url_path_for("static", path=path)
     app.state.settings = settings
     app.state.runtime = runtime
     app.state.optimizer = optimizer

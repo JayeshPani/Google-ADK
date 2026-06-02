@@ -286,7 +286,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ request.url_for('static', path='js/mammoth.browser.min.js') }}"></script>
+<script src="{{ static_path('js/mammoth.browser.min.js') }}"></script>
 <script>
   const form = document.getElementById("diagnose-form");
   const overlay = document.getElementById("loading-overlay");

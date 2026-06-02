@@ -85,6 +85,7 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("Diagnose the gap.", response.text)
         self.assertIn("Run Diagnosis", response.text)
         self.assertIn("/static/css/app.css", response.text)
+        self.assertNotIn("http://testserver/static/", response.text)
         self.assertNotIn("cdn.tailwindcss.com", response.text)
         self.assertNotIn("code.iconify.design", response.text)
         self.assertNotIn("api.fontshare.com", response.text)
