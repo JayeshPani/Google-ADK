@@ -17,7 +17,7 @@
           <option value="alphabetical" {% if sort_order == "alphabetical" %}selected{% endif %}>Sort by: Alphabetical</option>
         </select>
         <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-          <iconify-icon icon="lucide:chevron-down"></iconify-icon>
+          {{ icon_svg("lucide:chevron-down") }}
         </div>
       </div>
       <div class="relative">
@@ -29,7 +29,7 @@
           <option value="not_fit" {% if status_filter == "not_fit" %}selected{% endif %}>Not Fit</option>
         </select>
         <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-          <iconify-icon icon="lucide:filter"></iconify-icon>
+          {{ icon_svg("lucide:filter") }}
         </div>
       </div>
       <button type="submit" class="px-4 py-2.5 bg-[#6B8E83] text-white rounded-xl text-sm font-semibold">Apply</button>
@@ -65,8 +65,8 @@
             </div>
             <p class="text-lg text-gray-500">{{ entry.role_title }}</p>
             <div class="flex items-center gap-4 text-xs text-gray-400 font-medium">
-              <span class="flex items-center gap-1"><iconify-icon icon="lucide:file-text"></iconify-icon>{{ entry_packet.resume_name if entry_packet else "Saved packet" }}</span>
-              <span class="flex items-center gap-1"><iconify-icon icon="lucide:calendar"></iconify-icon>{{ entry.updated_at[:10] }}</span>
+              <span class="flex items-center gap-1">{{ icon_svg("lucide:file-text") }}<span>{{ entry_packet.resume_name if entry_packet else "Saved packet" }}</span></span>
+              <span class="flex items-center gap-1">{{ icon_svg("lucide:calendar") }}<span>{{ entry.updated_at[:10] }}</span></span>
             </div>
           </div>
         </div>
@@ -78,7 +78,7 @@
           <div class="flex items-center gap-3">
             <a href="/history?packet_id={{ entry.packet_id }}&status={{ status_filter }}&sort={{ sort_order }}" class="px-6 py-2.5 bg-[#6B8E83] text-white rounded-xl text-sm font-semibold hover:bg-[#5A7A70] transition-colors">View Analysis</a>
             <a href="/patch/{{ entry.packet_id }}" class="p-2.5 border border-[#EBE9E4] text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-all">
-              <iconify-icon icon="lucide:arrow-up-right" class="text-lg"></iconify-icon>
+              {{ icon_svg("lucide:arrow-up-right", "text-lg") }}
             </a>
           </div>
         </div>

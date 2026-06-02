@@ -30,7 +30,7 @@
       <div class="space-y-10">
         {% if error_message %}
         <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800 flex items-start gap-3">
-          <iconify-icon icon="lucide:alert-triangle" class="text-lg mt-0.5"></iconify-icon>
+          {{ icon_svg("lucide:alert-triangle", "text-lg mt-0.5") }}
           <div class="space-y-1">
             <p class="font-semibold">The diagnosis did not run.</p>
             <p>{{ error_message }}</p>
@@ -46,12 +46,12 @@
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Resume</label>
               <label class="relative group border-2 border-dashed border-[#EBE9E4] rounded-2xl p-8 transition-all hover:border-[#6B8E83] hover:bg-[#F0F4F2]/30 cursor-pointer text-center block">
                 <input type="file" name="resume" class="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf,.docx,.txt,.md" id="resume-input">
-                <iconify-icon icon="lucide:upload-cloud" class="text-4xl text-gray-300 group-hover:text-[#6B8E83] mb-4 transition-colors"></iconify-icon>
+                {{ icon_svg("lucide:upload-cloud", "text-4xl text-gray-300 group-hover:text-[#6B8E83] mb-4 transition-colors") }}
                 <p class="text-sm text-gray-600"><span class="font-semibold">Upload Resume</span> or drag and drop</p>
                 <p class="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD</p>
               </label>
               <div class="mt-3 flex items-center gap-2 text-xs text-[#6B8E83] font-medium {% if demo_case_key %}hidden{% endif %}" id="resume-loaded">
-                <iconify-icon icon="lucide:file-check"></iconify-icon>
+                {{ icon_svg("lucide:file-check") }}
                 <span id="resume-file-label">{{ resume_hint if resume_hint else "No file selected" }}</span>
               </div>
             </div>
@@ -125,12 +125,12 @@
         <div><span class="text-xs font-bold text-[#6B8E83] uppercase tracking-widest">Analysis Complete</span></div>
         <h2 class="text-3xl font-medium">{{ packet.job_requirements.role_title or "Untitled role" }} <span class="text-gray-400 font-normal">at</span> {{ packet.job_requirements.company_name or "Target company" }}</h2>
         <p class="text-gray-500 flex items-center gap-2">
-          <iconify-icon icon="lucide:file-text"></iconify-icon> {{ packet.resume_name }}
+          {{ icon_svg("lucide:file-text") }} {{ packet.resume_name }}
         </p>
       </div>
       <div class="flex items-center gap-3">
         <div class="px-6 py-3 rounded-2xl flex items-center gap-3 {{ packet_meta.badge_class }}">
-          <iconify-icon icon="lucide:alert-circle" class="text-xl"></iconify-icon>
+          {{ icon_svg("lucide:alert-circle", "text-xl") }}
           <div class="flex flex-col">
             <span class="text-[10px] font-bold uppercase">Recommendation</span>
             <span class="text-sm font-semibold">{{ packet_meta.label }}</span>
@@ -167,7 +167,7 @@
           <ul class="space-y-4">
             {% for gap in packet.report.top_gaps[:3] %}
             <li class="flex gap-3">
-              <iconify-icon icon="lucide:x-circle" class="text-red-400 mt-1"></iconify-icon>
+              {{ icon_svg("lucide:x-circle", "text-red-400 mt-1") }}
               <span class="text-sm">{{ gap.details }}</span>
             </li>
             {% endfor %}
@@ -205,7 +205,7 @@
       <div class="flex items-center justify-between">
         <h3 class="text-3xl font-medium">The Patch <span class="text-gray-400 font-normal">— Exact Edits</span></h3>
         <a href="/patch/{{ packet.packet_id }}" class="text-sm text-[#6B8E83] font-semibold flex items-center gap-2 hover:underline">
-          Open full patch plan <iconify-icon icon="lucide:arrow-right"></iconify-icon>
+          Open full patch plan {{ icon_svg("lucide:arrow-right") }}
         </a>
       </div>
       <div class="space-y-8">
@@ -222,7 +222,7 @@
                 <span class="text-[10px] font-bold text-[#6B8E83] uppercase">After (Recommended)</span>
                 <p class="text-sm leading-relaxed text-gray-800">{{ edit.rewritten_text }}</p>
                 <div class="pt-3 flex items-start gap-2 text-xs text-gray-500">
-                  <iconify-icon icon="lucide:info" class="text-[#6B8E83]"></iconify-icon>
+                  {{ icon_svg("lucide:info", "text-[#6B8E83]") }}
                   <span><span class="font-semibold">Why:</span> {{ edit.reason }}</span>
                 </div>
               </div>
@@ -260,7 +260,7 @@
                   <p class="text-xs font-bold text-[#6B8E83] uppercase tracking-tighter mb-1">Prompt {{ loop.index }}</p>
                   <p class="font-semibold text-sm">{{ question }}</p>
                 </div>
-                <iconify-icon icon="lucide:chevron-right" class="text-gray-300 group-hover:text-[#6B8E83]"></iconify-icon>
+                {{ icon_svg("lucide:chevron-right", "text-gray-300 group-hover:text-[#6B8E83]") }}
               </div>
             </div>
             {% endfor %}
@@ -286,7 +286,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/mammoth@1.9.0/mammoth.browser.min.js"></script>
+<script src="{{ request.url_for('static', path='js/mammoth.browser.min.js') }}"></script>
 <script>
   const form = document.getElementById("diagnose-form");
   const overlay = document.getElementById("loading-overlay");

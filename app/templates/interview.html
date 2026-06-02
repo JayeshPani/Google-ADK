@@ -7,7 +7,7 @@
   <div class="space-y-10">
     <nav class="flex items-center gap-2 text-sm text-gray-400">
       <a href="/?packet_id={{ packet.packet_id }}" class="hover:text-[#6B8E83] transition-colors">Analysis</a>
-      <iconify-icon icon="lucide:chevron-right"></iconify-icon>
+      {{ icon_svg("lucide:chevron-right") }}
       <span class="text-gray-900 font-medium">Interview Simulator</span>
     </nav>
 
@@ -18,7 +18,7 @@
       </div>
       <form method="post" action="/interview/{{ packet.packet_id }}/start">
         <button type="submit" class="px-6 py-3 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-xl font-semibold transition-all flex items-center gap-2">
-          <iconify-icon icon="lucide:play-circle"></iconify-icon> Start New Session
+          {{ icon_svg("lucide:play-circle") }} Start New Session
         </button>
       </form>
     </div>

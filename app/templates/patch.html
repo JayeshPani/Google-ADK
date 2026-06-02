@@ -20,7 +20,7 @@
   <div class="flex flex-col gap-8">
     <nav class="flex items-center gap-2 text-sm text-gray-400">
       <a href="/?packet_id={{ packet.packet_id }}" class="hover:text-[#6B8E83] transition-colors">Analysis</a>
-      <iconify-icon icon="lucide:chevron-right"></iconify-icon>
+      {{ icon_svg("lucide:chevron-right") }}
       <span class="text-gray-900 font-medium">Patch Details</span>
     </nav>
 
@@ -31,13 +31,13 @@
       </div>
       <div class="flex items-center gap-3">
         <button id="btn-copy-all" class="px-6 py-3 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-xl font-semibold shadow-lg shadow-[#6B8E83]/10 transition-all flex items-center gap-2">
-          <iconify-icon icon="lucide:copy"></iconify-icon> Copy All Edits
+          {{ icon_svg("lucide:copy") }} Copy All Edits
         </button>
         <a href="/patch/{{ packet.packet_id }}/download" class="px-6 py-3 bg-white border border-[#EBE9E4] text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-all flex items-center gap-2">
-          <iconify-icon icon="lucide:download"></iconify-icon> Export Patch Notes (.txt)
+          {{ icon_svg("lucide:download") }} Export Patch Notes (.txt)
         </a>
         <a href="/resume/{{ packet.packet_id }}" class="px-6 py-3 bg-white border border-[#EBE9E4] text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-all flex items-center gap-2">
-          <iconify-icon icon="lucide:file-text"></iconify-icon> Open Rewritten Resume
+          {{ icon_svg("lucide:file-text") }} Open Rewritten Resume
         </a>
       </div>
     </div>
@@ -45,7 +45,7 @@
     <div class="bg-white rounded-[32px] border border-[#EBE9E4] p-6 flex flex-wrap items-center gap-8 shadow-sm">
       <div class="flex items-center gap-4 border-r border-[#EBE9E4] pr-8">
         <div class="px-4 py-2 rounded-full {{ packet_meta.badge_class }} text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-          <iconify-icon icon="lucide:alert-circle"></iconify-icon> {{ packet_meta.label }}
+          {{ icon_svg("lucide:alert-circle") }} {{ packet_meta.label }}
         </div>
       </div>
       <div class="flex gap-6">
@@ -59,7 +59,7 @@
         </div>
       </div>
       <div class="ml-auto flex items-center gap-2 text-xs font-medium text-[#6B8E83]">
-        <iconify-icon icon="lucide:check-circle"></iconify-icon>
+        {{ icon_svg("lucide:check-circle") }}
         <span>Analyzing against {{ packet.report.matched_skills|length + packet.report.missing_skills|length }} core skill signals</span>
       </div>
     </div>
@@ -91,14 +91,14 @@
               <div class="p-8 bg-[#F9F8F6]">
                 <div class="flex justify-between items-start mb-4">
                   <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Current Resume</span>
-                  <iconify-icon icon="lucide:trash-2" class="text-gray-300"></iconify-icon>
+                  {{ icon_svg("lucide:trash-2", "text-gray-300") }}
                 </div>
                 <p class="text-gray-500 italic leading-relaxed">{{ edit.original_text }}</p>
               </div>
               <div class="p-8 relative">
                 <div class="flex justify-between items-start mb-4">
                   <span class="text-[10px] font-bold text-[#6B8E83] uppercase tracking-widest">Refined Patch</span>
-                  <iconify-icon icon="lucide:copy" class="text-[#6B8E83]"></iconify-icon>
+                  {{ icon_svg("lucide:copy", "text-[#6B8E83]") }}
                 </div>
                 <p class="text-gray-900 leading-relaxed font-medium">{{ edit.rewritten_text }}</p>
               </div>
@@ -106,7 +106,7 @@
             <div class="bg-gray-50 p-6 border-t border-[#EBE9E4] flex flex-col md:flex-row gap-6 md:items-center">
               <div class="flex-1 space-y-2">
                 <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-                  <iconify-icon icon="lucide:help-circle" class="text-[#6B8E83]"></iconify-icon> Why this edit?
+                  {{ icon_svg("lucide:help-circle", "text-[#6B8E83]") }} Why this edit?
                 </div>
                 <p class="text-sm text-gray-600">{{ edit.reason }}</p>
               </div>
@@ -145,7 +145,7 @@
   if (copyButton && copySource) {
     copyButton.addEventListener("click", async () => {
       await navigator.clipboard.writeText(copySource.value);
-      copyButton.innerHTML = '<iconify-icon icon="lucide:check"></iconify-icon> Copied';
+      copyButton.textContent = "Copied";
     });
   }
 </script>

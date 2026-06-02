@@ -7,7 +7,7 @@
   <div class="space-y-10">
     <nav class="flex items-center gap-2 text-sm text-gray-400">
       <a href="/?packet_id={{ packet.packet_id }}" class="hover:text-[#6B8E83] transition-colors">Analysis</a>
-      <iconify-icon icon="lucide:chevron-right"></iconify-icon>
+      {{ icon_svg("lucide:chevron-right") }}
       <span class="text-gray-900 font-medium">Rewritten Resume</span>
     </nav>
 
@@ -18,10 +18,10 @@
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <a href="/resume/{{ packet.packet_id }}/export.docx" class="px-6 py-3 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-xl font-semibold transition-all flex items-center gap-2">
-          <iconify-icon icon="lucide:file-down"></iconify-icon> Export DOCX
+          {{ icon_svg("lucide:file-down") }} Export DOCX
         </a>
         <a href="/resume/{{ packet.packet_id }}/export.pdf" class="px-6 py-3 bg-white border border-[#EBE9E4] text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-all flex items-center gap-2">
-          <iconify-icon icon="lucide:file-output"></iconify-icon> Export PDF
+          {{ icon_svg("lucide:file-output") }} Export PDF
         </a>
       </div>
     </div>

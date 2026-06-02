@@ -17,9 +17,12 @@ RUN apt-get update \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.txt package.json tailwind.config.js ./
 RUN pip install --no-cache-dir -r requirements.txt
+COPY package-lock.json ./
+RUN npm ci
 
 COPY . .
+RUN npm run build:assets
 
 CMD ["python", "-m", "uvicorn", "app.web_app:app", "--host", "0.0.0.0", "--port", "8080"]

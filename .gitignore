@@ -9,5 +9,5 @@ htmlcov/
 .DS_Store
 .streamlit/secrets.toml
 .local/
+node_modules/
 prompt_history/
-

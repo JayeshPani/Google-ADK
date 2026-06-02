@@ -45,7 +45,7 @@
         {% if google_oauth_enabled %}
         <div class="space-y-3">
           <a href="/auth/google/start?next_path={{ next_path }}" class="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white border border-[#EBE9E4] rounded-2xl font-semibold text-gray-700 hover:bg-[#FDFCF9] transition-all">
-            <iconify-icon icon="logos:google-icon" class="text-xl"></iconify-icon>
+            {{ icon_svg("logos:google-icon", "text-xl") }}
             <span>Continue with Google</span>
           </a>
           <div class="flex items-center gap-3 text-xs text-gray-400 uppercase tracking-[0.2em]">

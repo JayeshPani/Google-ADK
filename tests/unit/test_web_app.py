@@ -84,6 +84,17 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Diagnose the gap.", response.text)
         self.assertIn("Run Diagnosis", response.text)
+        self.assertIn("/static/css/app.css", response.text)
+        self.assertNotIn("cdn.tailwindcss.com", response.text)
+        self.assertNotIn("code.iconify.design", response.text)
+        self.assertNotIn("api.fontshare.com", response.text)
+        self.assertNotIn("unpkg.com/mammoth", response.text)
+
+    def test_static_css_route_serves_local_bundle(self) -> None:
+        response = self.client.get("/static/css/app.css")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/css", response.headers["content-type"])
 
     def test_login_page_renders(self) -> None:
         response = self.client.get("/login")

@@ -12,6 +12,7 @@ import uuid
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -33,10 +34,14 @@ from job_rejection_agent.ingestion import parse_resume_file
 from job_rejection_agent.observability import PromptOptimizer
 from job_rejection_agent.services import AuthError, AuthService, render_packet_markdown
 from job_rejection_agent.services.resume_export import build_resume_docx_bytes, build_resume_pdf_bytes
+from app.template_helpers import icon_svg
 
 
 ROOT = PROJECT_ROOT
 TEMPLATES = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
+STATIC_ROOT = ROOT / "app" / "static"
+STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+TEMPLATES.env.globals["icon_svg"] = icon_svg
 COOKIE_NAME = "refine_user_id"
 SESSION_COOKIE_NAME = "refine_session"
 GOOGLE_STATE_COOKIE_NAME = "refine_google_oauth_state"
@@ -488,6 +493,7 @@ def create_app(
     optimizer = optimizer or PromptOptimizer(settings=settings)
     auth_service = AuthService(settings=settings, tracker=runtime.service.tracker)
     app = FastAPI(title="Refine")
+    app.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
     app.state.settings = settings
     app.state.runtime = runtime
     app.state.optimizer = optimizer
