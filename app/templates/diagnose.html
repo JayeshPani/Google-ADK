@@ -46,12 +46,12 @@
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Resume</label>
               <label class="relative group border-2 border-dashed border-[#EBE9E4] rounded-2xl p-8 transition-all hover:border-[#6B8E83] hover:bg-[#F0F4F2]/30 cursor-pointer text-center block">
                 <input type="file" name="resume" class="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf,.docx,.txt,.md" id="resume-input">
-                {{ icon_svg("lucide:upload-cloud", "text-4xl text-gray-300 group-hover:text-[#6B8E83] mb-4 transition-colors") }}
+                {{ icon_svg("lucide:upload-cloud", "w-20 h-20 mx-auto text-gray-300 group-hover:text-[#6B8E83] mb-4 transition-colors") }}
                 <p class="text-sm text-gray-600"><span class="font-semibold">Upload Resume</span> or drag and drop</p>
                 <p class="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD</p>
               </label>
               <div class="mt-3 flex items-center gap-2 text-xs text-[#6B8E83] font-medium {% if demo_case_key %}hidden{% endif %}" id="resume-loaded">
-                {{ icon_svg("lucide:file-check") }}
+                {{ icon_svg("lucide:file-check", "w-4 h-4") }}
                 <span id="resume-file-label">{{ resume_hint if resume_hint else "No file selected" }}</span>
               </div>
             </div>
