@@ -1,0 +1,80 @@
+{% set workflow_steps = [
+  {
+    "key": "analysis",
+    "label": "Diagnose",
+    "description": "Understand the fit decision and the biggest evidence gaps.",
+    "href": "/?packet_id=" ~ packet.packet_id,
+  },
+  {
+    "key": "patch",
+    "label": "Patch",
+    "description": "Review exact resume edits before changing your draft.",
+    "href": "/patch/" ~ packet.packet_id,
+  },
+  {
+    "key": "plan",
+    "label": "Roadmap",
+    "description": "Close the highest-impact gaps with a focused weekly plan.",
+    "href": "/plan/" ~ packet.packet_id,
+  },
+  {
+    "key": "resume",
+    "label": "Resume",
+    "description": "Export the evidence-backed resume draft.",
+    "href": "/resume/" ~ packet.packet_id,
+  },
+  {
+    "key": "interview",
+    "label": "Interview",
+    "description": "Practice explaining the same evidence out loud.",
+    "href": "/interview/" ~ packet.packet_id,
+  },
+  {
+    "key": "save",
+    "label": "Save",
+    "description": "Return to this packet from your saved analyses.",
+    "href": "/history?packet_id=" ~ packet.packet_id,
+  },
+] %}
+{% set current_step = namespace(index=1) %}
+{% for step in workflow_steps %}
+  {% if step.key == workflow_current %}
+    {% set current_step.index = loop.index %}
+  {% endif %}
+{% endfor %}
+
+<section class="workflow-panel" aria-label="Recommended workflow">
+  <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+    <div class="max-w-2xl space-y-2">
+      <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Recommended workflow</p>
+      <h2 class="text-2xl font-medium">{{ workflow_heading|default("Follow the outputs in order") }}</h2>
+      <p class="text-sm text-gray-500 leading-6">{{ workflow_copy|default("Each screen builds on the one before it, so the next step is always the highest-leverage action for this packet.") }}</p>
+    </div>
+    {% if workflow_next_href is defined and workflow_next_label is defined %}
+    <a href="{{ workflow_next_href }}" class="workflow-next-button">
+      <span>Next</span>
+      <strong>{{ workflow_next_label }}</strong>
+      {{ icon_svg("lucide:arrow-right", "app-icon-lg") }}
+    </a>
+    {% endif %}
+  </div>
+
+  <div class="workflow-step-grid">
+    {% for step in workflow_steps %}
+      {% set state_class = "is-current" if step.key == workflow_current else "is-complete" if loop.index < current_step.index else "is-upcoming" %}
+      <a href="{{ step.href }}" class="workflow-step-card {{ state_class }}" {% if step.key == workflow_current %}aria-current="step"{% endif %}>
+        <span class="workflow-step-index">
+          {% if loop.index < current_step.index %}
+            {{ icon_svg("lucide:check", "app-icon-sm") }}
+          {% else %}
+            {{ loop.index }}
+          {% endif %}
+        </span>
+        <span class="min-w-0 space-y-1">
+          <span class="block text-sm font-semibold">{{ step.label }}</span>
+          <span class="block text-xs leading-5">{{ step.description }}</span>
+        </span>
+      </a>
+    {% endfor %}
+  </div>
+</section>

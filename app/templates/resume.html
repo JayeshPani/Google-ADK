@@ -26,6 +26,13 @@
       </div>
     </div>
 
+    {% set workflow_current = "resume" %}
+    {% set workflow_next_href = "/interview/" ~ packet.packet_id %}
+    {% set workflow_next_label = "Practice Interview Evidence" %}
+    {% set workflow_heading = "Export after checking the evidence" %}
+    {% set workflow_copy = "This draft applies the recommended patches. Confirm placeholders and metrics, then practice explaining the same evidence in interviews." %}
+    {% include "partials/workflow_steps.html" %}
+
     <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-8">
       <section class="bg-white rounded-[32px] border border-[#EBE9E4] shadow-sm overflow-hidden">
         <div class="px-8 py-7 border-b border-[#EBE9E4] bg-[#F9F8F6]">
@@ -84,6 +91,25 @@
         </div>
       </aside>
     </div>
+    <section class="workflow-primary-card flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+      <div class="max-w-xl space-y-2">
+        <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Next best step</p>
+        <h2 class="text-3xl font-medium">Practice saying the evidence out loud.</h2>
+        <p class="text-sm text-gray-500 leading-6">Interview practice checks whether the same proof points in this resume are clear, relevant, and specific when spoken.</p>
+      </div>
+      <div class="flex flex-col items-stretch md:items-end gap-3">
+        <a href="/interview/{{ packet.packet_id }}" class="workflow-next-button">
+          <span>Next</span>
+          <strong>Practice Interview Evidence</strong>
+          {{ icon_svg("lucide:arrow-right", "app-icon-lg") }}
+        </a>
+        <div class="workflow-secondary-actions justify-start md:justify-end">
+          <a href="/resume/{{ packet.packet_id }}/export.docx">{{ icon_svg("lucide:file-down") }} DOCX</a>
+          <a href="/resume/{{ packet.packet_id }}/export.pdf">{{ icon_svg("lucide:file-output") }} PDF</a>
+          <a href="/plan/{{ packet.packet_id }}">Roadmap</a>
+        </div>
+      </div>
+    </section>
   </div>
 </main>
 {% endblock %}

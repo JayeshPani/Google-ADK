@@ -38,10 +38,25 @@
 @layer components {
   .app-icon {
     display: inline-block;
-    width: 1em;
-    height: 1em;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
     vertical-align: -0.125em;
+  }
+
+  .app-icon-sm {
+    width: 14px;
+    height: 14px;
+  }
+
+  .app-icon-lg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .app-icon-xl {
+    width: 24px;
+    height: 24px;
   }
 
   .badge-apply-now {
@@ -136,6 +151,149 @@
 
   .summary-chevron {
     transition: transform 0.2s ease;
+  }
+
+  .workflow-panel {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    padding: 24px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .workflow-step-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .workflow-step-card {
+    min-height: 118px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 14px;
+    color: #4b5563;
+    background: #f9f8f6;
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .workflow-step-card:hover {
+    border-color: var(--sage);
+    background: #ffffff;
+  }
+
+  .workflow-step-card.is-current {
+    border-color: var(--sage);
+    background: #f0f4f2;
+    color: var(--warm-gray);
+    box-shadow: 0 8px 20px rgba(107, 142, 131, 0.12);
+  }
+
+  .workflow-step-card.is-complete {
+    background: #ffffff;
+    border-color: #dce7e1;
+    color: #374151;
+  }
+
+  .workflow-step-index {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: #6b7280;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .workflow-step-card.is-current .workflow-step-index {
+    border-color: var(--sage);
+    background: var(--sage);
+    color: #ffffff;
+  }
+
+  .workflow-step-card.is-complete .workflow-step-index {
+    border-color: #bbf7d0;
+    background: #ecfdf5;
+    color: #047857;
+  }
+
+  .workflow-next-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border-radius: 16px;
+    background: var(--sage);
+    color: #ffffff;
+    padding: 14px 18px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    box-shadow: 0 10px 18px rgba(107, 142, 131, 0.18);
+    transition: background-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .workflow-next-button:hover {
+    background: var(--sage-hover);
+  }
+
+  .workflow-next-button:active {
+    transform: scale(0.98);
+  }
+
+  .workflow-next-button span {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+
+  .workflow-primary-card {
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    background: #ffffff;
+    padding: 24px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .workflow-secondary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .workflow-secondary-actions a,
+  .workflow-secondary-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: #4b5563;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .workflow-secondary-actions a:hover,
+  .workflow-secondary-actions button:hover {
+    border-color: var(--sage);
+    background: #f9fafb;
+    color: var(--warm-gray);
   }
 }
 

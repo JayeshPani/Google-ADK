@@ -26,6 +26,14 @@
         <p class="text-xs text-[#6B8E83] font-semibold mt-1">Day 1 of {{ plan_cards|length }} tasks</p>
       </div>
     </div>
+    <div class="mb-10">
+      {% set workflow_current = "plan" %}
+      {% set workflow_next_href = "/resume/" ~ packet.packet_id %}
+      {% set workflow_next_label = "Review Resume Draft" %}
+      {% set workflow_heading = "Use the roadmap before exporting" %}
+      {% set workflow_copy = "The plan tells you what evidence to strengthen first; the resume draft is the next screen once you understand that order." %}
+      {% include "partials/workflow_steps.html" %}
+    </div>
     <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
       {% for card in plan_cards[:5] %}
       <div class="space-y-4">
@@ -57,7 +65,7 @@
       <div class="p-6 bg-white rounded-3xl border border-[#EBE9E4] space-y-4 flex flex-col justify-between h-full">
         <div class="space-y-2">
           <div class="w-10 h-10 bg-[#F0F4F2] rounded-xl flex items-center justify-center">
-            {{ icon_svg(card.icon, "text-[#6B8E83] text-xl") }}
+            {{ icon_svg(card.icon, "text-[#6B8E83] app-icon-lg") }}
           </div>
           <h4 class="font-bold">{{ card.title }}</h4>
           <p class="text-xs text-gray-500 leading-relaxed">{{ card.description }}</p>
@@ -101,23 +109,24 @@
     </div>
   </section>
 
-  <section class="bg-[#F5F3F0] rounded-[48px] p-12 text-center space-y-8">
-    <div class="max-w-xl mx-auto space-y-4">
-      <h2 class="text-4xl font-medium">Ready to patch your resume?</h2>
-      <p class="text-gray-500">Your edits are finalized and ready for the next application cycle.</p>
+  <section class="workflow-primary-card flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-20">
+    <div class="max-w-xl space-y-2">
+      <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Next best step</p>
+      <h2 class="text-3xl font-medium">Review the rewritten resume draft.</h2>
+      <p class="text-sm text-gray-500 leading-6">Now that the work is ordered, inspect the final draft and export only after confirming any placeholders or measurable outcomes.</p>
     </div>
-    <div class="flex flex-col md:flex-row items-center justify-center gap-4">
-      <a href="/patch/{{ packet.packet_id }}" class="w-full md:w-auto px-10 py-4 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 transition-all transform active:scale-[0.98]">Patch Details</a>
-      <a href="/resume/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
-        {{ icon_svg("lucide:file-pen-line") }} Rewritten Resume
+    <div class="flex flex-col items-stretch md:items-end gap-3">
+      <a href="/resume/{{ packet.packet_id }}" class="workflow-next-button">
+        <span>Next</span>
+        <strong>Review Resume Draft</strong>
+        {{ icon_svg("lucide:arrow-right", "app-icon-lg") }}
       </a>
-      <a href="/interview/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
-        {{ icon_svg("lucide:mic") }} Interview Simulator
-      </a>
-      <a href="/history?packet_id={{ packet.packet_id }}" class="w-full md:w-auto px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
-        {{ icon_svg("lucide:bookmark") }} Save Roadmap
-      </a>
-      <a href="/?packet_id={{ packet.packet_id }}" class="w-full md:w-auto px-8 py-4 text-gray-400 hover:text-gray-600 font-semibold transition-colors">Back to Results</a>
+      <div class="workflow-secondary-actions justify-start md:justify-end">
+        <a href="/patch/{{ packet.packet_id }}">{{ icon_svg("lucide:file-pen-line") }} Patch</a>
+        <a href="/interview/{{ packet.packet_id }}">{{ icon_svg("lucide:mic") }} Interview</a>
+        <a href="/history?packet_id={{ packet.packet_id }}">{{ icon_svg("lucide:bookmark") }} Save</a>
+        <a href="/?packet_id={{ packet.packet_id }}">Results</a>
+      </div>
     </div>
   </section>
 </main>

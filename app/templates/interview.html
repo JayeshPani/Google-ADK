@@ -23,6 +23,11 @@
       </form>
     </div>
 
+    {% set workflow_current = "interview" %}
+    {% set workflow_heading = "Practice after the resume is ready" %}
+    {% set workflow_copy = "Use this step to turn the patched resume evidence into stronger spoken answers before saving or revisiting the packet." %}
+    {% include "partials/workflow_steps.html" %}
+
     <div class="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-8">
       <aside class="space-y-6">
         <div class="bg-white rounded-[28px] border border-[#EBE9E4] p-6 space-y-4">
@@ -138,6 +143,24 @@
         {% endif %}
       </section>
     </div>
+    <section class="workflow-primary-card flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+      <div class="max-w-xl space-y-2">
+        <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Last step</p>
+        <h2 class="text-3xl font-medium">Save this packet when you are done practicing.</h2>
+        <p class="text-sm text-gray-500 leading-6">Saved analyses let you return to the diagnosis, edits, roadmap, resume draft, and interview sessions later.</p>
+      </div>
+      <div class="flex flex-col items-stretch md:items-end gap-3">
+        <a href="/history?packet_id={{ packet.packet_id }}" class="workflow-next-button">
+          <span>Finish</span>
+          <strong>Save and Revisit</strong>
+          {{ icon_svg("lucide:arrow-right", "app-icon-lg") }}
+        </a>
+        <div class="workflow-secondary-actions justify-start md:justify-end">
+          <a href="/resume/{{ packet.packet_id }}">Resume Draft</a>
+          <a href="/plan/{{ packet.packet_id }}">Roadmap</a>
+        </div>
+      </div>
+    </section>
   </div>
 </main>
 {% endblock %}

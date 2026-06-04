@@ -78,7 +78,7 @@
           <div class="flex items-center gap-3">
             <a href="/history?packet_id={{ entry.packet_id }}&status={{ status_filter }}&sort={{ sort_order }}" class="px-6 py-2.5 bg-[#6B8E83] text-white rounded-xl text-sm font-semibold hover:bg-[#5A7A70] transition-colors">View Analysis</a>
             <a href="/patch/{{ entry.packet_id }}" class="p-2.5 border border-[#EBE9E4] text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-all">
-              {{ icon_svg("lucide:arrow-up-right", "text-lg") }}
+              {{ icon_svg("lucide:arrow-up-right", "app-icon-lg") }}
             </a>
           </div>
         </div>
@@ -93,17 +93,24 @@
 
   {% if selected_packet %}
   <section class="mt-16 bg-[#F5F3F0] rounded-[32px] p-8 md:p-12 border border-[#EBE9E4]">
-    <div class="flex flex-col md:flex-row items-center justify-between gap-10">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-10">
       <div class="max-w-md space-y-4">
+        <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Continue saved workflow</p>
         <h3 class="text-2xl font-medium">{{ selected_packet.job_requirements.role_title }} at {{ selected_packet.job_requirements.company_name }}</h3>
         <p class="text-gray-500">{{ selected_packet.report.narrative_summary }}</p>
       </div>
-      <div class="flex flex-col md:flex-row gap-4">
-        <a href="/?packet_id={{ selected_packet.packet_id }}" class="px-10 py-4 bg-[#6B8E83] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 hover:bg-[#5A7A70] transition-all transform active:scale-95">Open Results</a>
-        <a href="/patch/{{ selected_packet.packet_id }}" class="px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50">Patch Details</a>
-        <a href="/resume/{{ selected_packet.packet_id }}" class="px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50">Rewritten Resume</a>
-        <a href="/interview/{{ selected_packet.packet_id }}" class="px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50">Interview Sim</a>
-        <a href="/plan/{{ selected_packet.packet_id }}" class="px-8 py-4 bg-white border border-[#EBE9E4] text-gray-600 rounded-2xl font-semibold hover:bg-gray-50">Action Plan</a>
+      <div class="flex flex-col items-stretch md:items-end gap-3">
+        <a href="/patch/{{ selected_packet.packet_id }}" class="workflow-next-button">
+          <span>Continue</span>
+          <strong>Review Resume Patch</strong>
+          {{ icon_svg("lucide:arrow-right", "app-icon-lg") }}
+        </a>
+        <div class="workflow-secondary-actions justify-start md:justify-end">
+          <a href="/?packet_id={{ selected_packet.packet_id }}">Results</a>
+          <a href="/plan/{{ selected_packet.packet_id }}">Roadmap</a>
+          <a href="/resume/{{ selected_packet.packet_id }}">Resume</a>
+          <a href="/interview/{{ selected_packet.packet_id }}">Interview</a>
+        </div>
       </div>
     </div>
   </section>

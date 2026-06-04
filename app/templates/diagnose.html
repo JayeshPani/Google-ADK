@@ -26,11 +26,34 @@
         Evidence-first job rejection diagnostic tool for students and early-career professionals.
       </p>
     </div>
+    <div class="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white border border-[#EBE9E4] rounded-2xl p-5 flex gap-4">
+        <div class="step-number shrink-0">1</div>
+        <div class="space-y-1">
+          <p class="text-sm font-semibold">Upload your resume</p>
+          <p class="text-xs leading-5 text-gray-500">Start with the document recruiters actually saw.</p>
+        </div>
+      </div>
+      <div class="bg-white border border-[#EBE9E4] rounded-2xl p-5 flex gap-4">
+        <div class="step-number shrink-0">2</div>
+        <div class="space-y-1">
+          <p class="text-sm font-semibold">Paste one job description</p>
+          <p class="text-xs leading-5 text-gray-500">Use the exact role so the gap analysis stays targeted.</p>
+        </div>
+      </div>
+      <div class="bg-white border border-[#EBE9E4] rounded-2xl p-5 flex gap-4">
+        <div class="step-number shrink-0">3</div>
+        <div class="space-y-1">
+          <p class="text-sm font-semibold">Run the diagnosis</p>
+          <p class="text-xs leading-5 text-gray-500">Then follow the guided output one step at a time.</p>
+        </div>
+      </div>
+    </div>
     <form action="/diagnose" method="post" enctype="multipart/form-data" class="bg-white rounded-[32px] border border-[#EBE9E4] shadow-sm overflow-hidden p-8 md:p-12" id="diagnose-form">
       <div class="space-y-10">
         {% if error_message %}
         <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800 flex items-start gap-3">
-          {{ icon_svg("lucide:alert-triangle", "text-lg mt-0.5") }}
+          {{ icon_svg("lucide:alert-triangle", "app-icon-lg mt-0.5") }}
           <div class="space-y-1">
             <p class="font-semibold">The diagnosis did not run.</p>
             <p>{{ error_message }}</p>
@@ -125,12 +148,12 @@
         <div><span class="text-xs font-bold text-[#6B8E83] uppercase tracking-widest">Analysis Complete</span></div>
         <h2 class="text-3xl font-medium">{{ packet.job_requirements.role_title or "Untitled role" }} <span class="text-gray-400 font-normal">at</span> {{ packet.job_requirements.company_name or "Target company" }}</h2>
         <p class="text-gray-500 flex items-center gap-2">
-          {{ icon_svg("lucide:file-text") }} {{ packet.resume_name }}
+          {{ icon_svg("lucide:file-text", "app-icon-lg") }} {{ packet.resume_name }}
         </p>
       </div>
       <div class="flex items-center gap-3">
         <div class="px-6 py-3 rounded-2xl flex items-center gap-3 {{ packet_meta.badge_class }}">
-          {{ icon_svg("lucide:alert-circle", "text-xl") }}
+          {{ icon_svg("lucide:alert-circle", "app-icon-lg") }}
           <div class="flex flex-col">
             <span class="text-[10px] font-bold uppercase">Recommendation</span>
             <span class="text-sm font-semibold">{{ packet_meta.label }}</span>
@@ -138,6 +161,12 @@
         </div>
       </div>
     </div>
+    {% set workflow_current = "analysis" %}
+    {% set workflow_next_href = "/patch/" ~ packet.packet_id %}
+    {% set workflow_next_label = "Review Resume Patch" %}
+    {% set workflow_heading = "Start with the verdict, then patch" %}
+    {% set workflow_copy = "The diagnosis explains why the application likely missed, then the patch page turns that evidence into concrete resume edits." %}
+    {% include "partials/workflow_steps.html" %}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div class="p-6 bg-white rounded-[24px] border border-[#EBE9E4] text-center space-y-1">
         <span class="text-3xl font-semibold">{{ "%.1f"|format(packet.report.score_overall) }}/10</span>
@@ -268,12 +297,25 @@
         </div>
       </div>
     </div>
-    <div class="flex flex-col md:flex-row items-center justify-center gap-4 pt-12 pb-20">
-      <a href="/history?packet_id={{ packet.packet_id }}" class="w-full md:w-auto px-8 py-3 bg-[#6B8E83] text-white rounded-xl font-semibold shadow-md">Save Analysis Packet</a>
-      <a href="/patch/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-3 bg-white border border-[#EBE9E4] text-gray-600 rounded-xl font-semibold">Open Patch Details</a>
-      <a href="/plan/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-3 bg-white border border-[#EBE9E4] text-gray-600 rounded-xl font-semibold">Open Action Plan</a>
-      <a href="/resume/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-3 bg-white border border-[#EBE9E4] text-gray-600 rounded-xl font-semibold">Open Rewritten Resume</a>
-      <a href="/interview/{{ packet.packet_id }}" class="w-full md:w-auto px-8 py-3 bg-white border border-[#EBE9E4] text-gray-600 rounded-xl font-semibold">Open Interview Sim</a>
+    <div class="workflow-primary-card flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-20">
+      <div class="max-w-xl space-y-2">
+        <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Next best step</p>
+        <h3 class="text-2xl font-medium">Review the exact resume patch before doing anything else.</h3>
+        <p class="text-sm text-gray-500 leading-6">The patch page shows what to change, why it matters, and which evidence gap each edit is targeting.</p>
+      </div>
+      <div class="flex flex-col items-stretch md:items-end gap-3">
+        <a href="/patch/{{ packet.packet_id }}" class="workflow-next-button">
+          <span>Next</span>
+          <strong>Review Resume Patch</strong>
+          {{ icon_svg("lucide:arrow-right", "app-icon-lg") }}
+        </a>
+        <div class="workflow-secondary-actions justify-start md:justify-end">
+          <a href="/plan/{{ packet.packet_id }}">Roadmap</a>
+          <a href="/resume/{{ packet.packet_id }}">Resume Draft</a>
+          <a href="/interview/{{ packet.packet_id }}">Interview</a>
+          <a href="/history?packet_id={{ packet.packet_id }}">Save</a>
+        </div>
+      </div>
     </div>
   </section>
   {% endif %}
