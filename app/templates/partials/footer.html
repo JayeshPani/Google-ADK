@@ -1,14 +1,43 @@
-<footer class="bg-white border-t border-[#EBE9E4] py-12 px-6 mt-auto">
-  <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
-    <div class="flex items-center gap-3">
-      {{ icon_svg("lucide:layers", "text-[#6B8E83] app-icon-xl") }}
-      <span class="text-xl serif">Refine</span>
+<footer class="bg-white border-t border-[#EBE9E4] py-10 px-6 mt-auto">
+  <div class="max-w-6xl mx-auto space-y-8">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        {{ icon_svg("lucide:layers", "text-[#6B8E83] app-icon-xl") }}
+        <span class="text-xl serif">Refine</span>
+      </div>
+      <p class="text-sm text-gray-400 italic">Empowering evidence-first careers.</p>
     </div>
-    <div class="flex gap-8 text-sm text-gray-400 font-medium">
-      <a href="/settings" class="hover:text-[#6B8E83] transition-colors">Methodology</a>
-      <a href="/settings" class="hover:text-[#6B8E83] transition-colors">Privacy</a>
-      <a href="/settings" class="hover:text-[#6B8E83] transition-colors">MCP Integration</a>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <section class="rounded-2xl border border-[#EBE9E4] bg-[#FDFCF9] p-5">
+        <div class="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          {{ icon_svg("lucide:file-check", "text-[#6B8E83]") }}
+          <span>Methodology</span>
+        </div>
+        <p class="mt-3 text-sm leading-6 text-gray-500">
+          Refine compares resume facts against the job description, ATS signals, level fit, and optional rejection notes, then orders fixes by evidence gap and application impact.
+        </p>
+      </section>
+
+      <section class="rounded-2xl border border-[#EBE9E4] bg-[#FDFCF9] p-5">
+        <div class="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          {{ icon_svg("lucide:info", "text-[#6B8E83]") }}
+          <span>Privacy</span>
+        </div>
+        <p class="mt-3 text-sm leading-6 text-gray-500">
+          Uploaded resumes and job descriptions are used to build your analysis packet. Saved packets stay scoped to your guest session or signed-in account.
+        </p>
+      </section>
+
+      <section class="rounded-2xl border border-[#EBE9E4] bg-[#FDFCF9] p-5">
+        <div class="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          {{ icon_svg("lucide:server", "text-[#6B8E83]") }}
+          <span>MCP Integration</span>
+        </div>
+        <p class="mt-3 text-sm leading-6 text-gray-500">
+          When Phoenix MCP is configured, the ADK agent can read trace summaries and eval annotations so prompt improvements are based on observed failures, with fallback if unavailable.
+        </p>
+      </section>
     </div>
-    <p class="text-sm text-gray-400 italic">Empowering evidence-first careers.</p>
   </div>
 </footer>
