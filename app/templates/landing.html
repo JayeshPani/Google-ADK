@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Refine | Resume and Job Fit Coach{% endblock %}
+
+{% block content %}
+<main class="flex-1">
+  <section class="max-w-6xl mx-auto px-6 py-16 md:py-24">
+    <div class="text-center space-y-8 max-w-4xl mx-auto">
+      <div class="space-y-5">
+        <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Resume clarity, before you apply</p>
+        <h1 class="text-4xl md:text-6xl font-medium leading-tight">Know what to fix before the next application.</h1>
+        <p class="text-lg md:text-xl leading-8 text-gray-500 max-w-2xl mx-auto">
+          Refine turns your resume and a job description into a clear diagnosis, focused edits, and practice questions you can actually use.
+        </p>
+      </div>
+      <div class="flex flex-col sm:flex-row justify-center gap-3">
+        <a href="/login?next_path=/diagnose" class="inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl bg-[#986848] text-white font-semibold shadow-lg shadow-[#986848]/20 hover:bg-[#683820] transition-colors">
+          Get Started
+          {{ icon_svg("lucide:arrow-right", "app-icon-lg") }}
+        </a>
+        <a href="#features" class="inline-flex items-center justify-center px-7 py-4 rounded-2xl border border-[#986848] bg-[#F5EFEA] text-[#986848] font-semibold hover:bg-white transition-colors">
+          See Features
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="max-w-6xl mx-auto px-6 py-6 md:py-14">
+    <div class="mb-10 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <div class="space-y-3">
+        <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">What Refine helps with</p>
+        <h2 class="text-3xl md:text-4xl font-medium">A calmer way to improve your applications.</h2>
+      </div>
+      <p class="text-gray-500 max-w-md">Start with fit, then move through edits, planning, and interview practice in order.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <article class="bg-white border border-[#EBE9E4] rounded-[24px] p-6 space-y-4">
+        {{ icon_svg("lucide:search-check", "text-[#986848] app-icon-xl") }}
+        <div>
+          <h3 class="text-lg font-semibold">Resume diagnosis</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-500">See the score, key gaps, ATS checks, and the real reason a role may be risky.</p>
+        </div>
+      </article>
+      <article class="bg-white border border-[#EBE9E4] rounded-[24px] p-6 space-y-4">
+        {{ icon_svg("lucide:file-pen-line", "text-[#986848] app-icon-xl") }}
+        <div>
+          <h3 class="text-lg font-semibold">Resume patching</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-500">Turn feedback into concrete bullet edits without adding unsupported claims.</p>
+        </div>
+      </article>
+      <article class="bg-white border border-[#EBE9E4] rounded-[24px] p-6 space-y-4">
+        {{ icon_svg("lucide:scale", "text-[#986848] app-icon-xl") }}
+        <div>
+          <h3 class="text-lg font-semibold">JD comparison</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-500">Compare multiple roles and choose where to apply first.</p>
+        </div>
+      </article>
+      <article class="bg-white border border-[#EBE9E4] rounded-[24px] p-6 space-y-4">
+        {{ icon_svg("lucide:map", "text-[#986848] app-icon-xl") }}
+        <div>
+          <h3 class="text-lg font-semibold">Action roadmap</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-500">Get a focused plan for the highest-impact gaps.</p>
+        </div>
+      </article>
+      <article class="bg-white border border-[#EBE9E4] rounded-[24px] p-6 space-y-4">
+        {{ icon_svg("lucide:messages-square", "text-[#986848] app-icon-xl") }}
+        <div>
+          <h3 class="text-lg font-semibold">Interview practice</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-500">Practice explaining the same evidence recruiters need to hear.</p>
+        </div>
+      </article>
+      <article class="bg-white border border-[#EBE9E4] rounded-[24px] p-6 space-y-4">
+        {{ icon_svg("lucide:bookmark-check", "text-[#986848] app-icon-xl") }}
+        <div>
+          <h3 class="text-lg font-semibold">Saved progress</h3>
+          <p class="mt-2 text-sm leading-6 text-gray-500">Keep your analyses, drafts, and plans tied to your account.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="max-w-6xl mx-auto px-6 py-8 md:py-16">
+    <div class="rounded-[32px] bg-[#F5F3F0] p-8 md:p-12">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="space-y-3">
+          <div class="step-number">1</div>
+          <h3 class="text-xl font-semibold">Upload</h3>
+          <p class="text-sm leading-6 text-gray-600">Add your resume and the job description.</p>
+        </div>
+        <div class="space-y-3">
+          <div class="step-number">2</div>
+          <h3 class="text-xl font-semibold">Review</h3>
+          <p class="text-sm leading-6 text-gray-600">Understand fit, gaps, and what to fix first.</p>
+        </div>
+        <div class="space-y-3">
+          <div class="step-number">3</div>
+          <h3 class="text-xl font-semibold">Apply</h3>
+          <p class="text-sm leading-6 text-gray-600">Use the patch, plan, and interview prep together.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="max-w-6xl mx-auto px-6 py-12 md:py-20">
+    <div class="bg-white border border-[#EBE9E4] rounded-[32px] p-8 md:p-12 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+      <div>
+        <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Ready when you are</p>
+        <h2 class="mt-3 text-3xl font-medium">Start with one resume and one role.</h2>
+      </div>
+      <a href="/login?next_path=/diagnose" class="inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl bg-[#986848] text-white font-semibold hover:bg-[#683820] transition-colors">
+        Get Started
+        {{ icon_svg("lucide:arrow-right", "app-icon-lg") }}
+      </a>
+    </div>
+  </section>
+</main>
+{% endblock %}

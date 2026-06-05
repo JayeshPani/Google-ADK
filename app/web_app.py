@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
+from urllib.parse import quote
 import sys
 import threading
 import time
@@ -174,14 +175,13 @@ def _user_identity(request: Request, auth_service: AuthService) -> ViewerContext
             guest_user_id=guest_user_id,
             should_set_guest_cookie=False,
         )
-    new_guest_user_id = f"guest-{uuid.uuid4().hex[:10]}"
     return ViewerContext(
-        user_id=new_guest_user_id,
-        label=_user_label(new_guest_user_id),
+        user_id="",
+        label="",
         authenticated=False,
         email=None,
-        guest_user_id=new_guest_user_id,
-        should_set_guest_cookie=True,
+        guest_user_id=None,
+        should_set_guest_cookie=False,
     )
 
 
@@ -245,10 +245,24 @@ def _clear_google_state_cookie(response: HTMLResponse | RedirectResponse) -> Non
 def _sanitize_next_path(next_path: str | None) -> str:
     candidate = (next_path or "").strip()
     if not candidate.startswith("/"):
-        return "/history"
+        return "/diagnose"
     if candidate.startswith("//"):
-        return "/history"
-    return candidate or "/history"
+        return "/diagnose"
+    return candidate or "/diagnose"
+
+
+def _request_path_with_query(request: Request) -> str:
+    path = request.url.path or "/"
+    if request.url.query:
+        return f"{path}?{request.url.query}"
+    return path
+
+
+def _require_authentication(request: Request, viewer: ViewerContext) -> RedirectResponse | None:
+    if viewer.authenticated:
+        return None
+    next_path = quote(_request_path_with_query(request), safe="")
+    return RedirectResponse(url=f"/login?next_path={next_path}", status_code=303)
 
 
 def _google_redirect_uri(request: Request, settings: Settings) -> str:
@@ -591,13 +605,13 @@ def create_app(
     @app.get("/auth/google/start")
     async def google_oauth_start(
         request: Request,
-        next_path: str = "/history",
+        next_path: str = "/diagnose",
     ):
         viewer = _user_identity(request, auth_service)
         if viewer.authenticated:
             return RedirectResponse(url=_sanitize_next_path(next_path), status_code=303)
         if not auth_service.google_oauth_enabled:
-            return RedirectResponse(url="/login?mode=signin", status_code=303)
+            return RedirectResponse(url="/login?mode=signin&next_path=/diagnose", status_code=303)
 
         sanitized_next = _sanitize_next_path(next_path)
         state_token = auth_service.create_google_oauth_state_token(
@@ -630,7 +644,7 @@ def create_app(
                 context={
                     "active_item": "login",
                     "auth_mode": "signin",
-                    "next_path": "/history",
+                    "next_path": "/diagnose",
                     "auth_error": f"Google sign-in failed: {error}",
                     "google_oauth_enabled": auth_service.google_oauth_enabled,
                 },
@@ -645,7 +659,7 @@ def create_app(
                 context={
                     "active_item": "login",
                     "auth_mode": "signin",
-                    "next_path": "/history",
+                    "next_path": "/diagnose",
                     "auth_error": "Google sign-in state could not be verified. Try again.",
                     "google_oauth_enabled": auth_service.google_oauth_enabled,
                 },
@@ -660,7 +674,7 @@ def create_app(
                 context={
                     "active_item": "login",
                     "auth_mode": "signin",
-                    "next_path": verified_state.get("next_path", "/history"),
+                    "next_path": verified_state.get("next_path", "/diagnose"),
                     "auth_error": "Google sign-in did not return an authorization code.",
                     "google_oauth_enabled": auth_service.google_oauth_enabled,
                 },
@@ -681,7 +695,7 @@ def create_app(
                 context={
                     "active_item": "login",
                     "auth_mode": "signin",
-                    "next_path": verified_state.get("next_path", "/history"),
+                    "next_path": verified_state.get("next_path", "/diagnose"),
                     "auth_error": str(exc),
                     "google_oauth_enabled": auth_service.google_oauth_enabled,
                 },
@@ -702,7 +716,7 @@ def create_app(
     @app.get("/login", response_class=HTMLResponse)
     async def login_page(
         request: Request,
-        next_path: str = "/history",
+        next_path: str = "/diagnose",
         mode: str = "signin",
     ) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
@@ -726,7 +740,7 @@ def create_app(
         request: Request,
         email: str = Form(""),
         password: str = Form(""),
-        next_path: str = Form("/history"),
+        next_path: str = Form("/diagnose"),
     ):
         viewer = _user_identity(request, auth_service)
         try:
@@ -762,7 +776,7 @@ def create_app(
         request: Request,
         email: str = Form(""),
         password: str = Form(""),
-        next_path: str = Form("/history"),
+        next_path: str = Form("/diagnose"),
     ):
         viewer = _user_identity(request, auth_service)
         try:
@@ -801,6 +815,16 @@ def create_app(
         return response
 
     @app.get("/", response_class=HTMLResponse)
+    async def landing_page(request: Request) -> HTMLResponse:
+        viewer = _user_identity(request, auth_service)
+        return _render(
+            request,
+            "landing.html",
+            viewer=viewer,
+            context={"active_item": "landing"},
+        )
+
+    @app.get("/diagnose", response_class=HTMLResponse)
     async def diagnose_page(
         request: Request,
         packet_id: str = "",
@@ -808,6 +832,9 @@ def create_app(
         job_id: str = "",
     ) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         return _render(
             request,
@@ -817,7 +844,11 @@ def create_app(
         )
 
     @app.post("/resume/preview-parse")
-    async def resume_preview_parse(resume: UploadFile = File(...)):
+    async def resume_preview_parse(request: Request, resume: UploadFile = File(...)):
+        viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         if not resume.filename:
             return JSONResponse({"error": "Choose a resume file first."}, status_code=400)
         try:
@@ -855,7 +886,7 @@ def create_app(
                 progress_callback=lambda step, percent: job_registry.progress(job_id, step, percent),
             )
             packet = quick.packet
-            redirect_url = f"/?packet_id={packet.packet_id}&job_id={job_id}"
+            redirect_url = f"/diagnose?packet_id={packet.packet_id}&job_id={job_id}"
             job_registry.update(
                 job_id,
                 status="quick_ready",
@@ -901,7 +932,7 @@ def create_app(
                 packet_id=packet_id,
                 current_step="Full report finishing",
                 progress_percent=74,
-                redirect_url=f"/?packet_id={packet_id}&job_id={job_id}",
+                redirect_url=f"/diagnose?packet_id={packet_id}&job_id={job_id}",
             )
             result = runtime.service.complete_diagnosis(
                 packet_id=packet_id,
@@ -930,6 +961,9 @@ def create_app(
     @app.get("/diagnose/progress/{job_id}", response_class=HTMLResponse)
     async def diagnose_progress_page(request: Request, job_id: str) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         job = job_registry.get(job_id)
         if job is None or job.user_id != viewer.user_id:
             return _render(
@@ -958,6 +992,9 @@ def create_app(
     @app.get("/diagnose/jobs/{job_id}.json")
     async def diagnose_job_status(request: Request, job_id: str):
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         job = job_registry.get(job_id)
         if job is None or job.user_id != viewer.user_id:
             return JSONResponse({"status": "missing", "error": "Diagnosis job not found."}, status_code=404)
@@ -977,11 +1014,14 @@ def create_app(
     @app.post("/diagnose/packets/{packet_id}/complete")
     async def complete_existing_packet(request: Request, packet_id: str):
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None:
             return RedirectResponse(url="/", status_code=303)
         if packet.report.rewritten_resume is not None and packet.report.exact_edits:
-            return RedirectResponse(url=f"/?packet_id={packet.packet_id}", status_code=303)
+            return RedirectResponse(url=f"/diagnose?packet_id={packet.packet_id}", status_code=303)
         job = job_registry.create(viewer.user_id)
         background_tasks = BackgroundTasks()
         background_tasks.add_task(
@@ -1008,6 +1048,9 @@ def create_app(
         resume: UploadFile | None = File(default=None),
     ):
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         temp_path: Path | None = None
         resume_path: Path | None = None
         resume_preview: dict[str, Any] | None = None
@@ -1126,6 +1169,9 @@ def create_app(
     @app.get("/patch/{packet_id}", response_class=HTMLResponse)
     async def patch_page(request: Request, packet_id: str) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None:
             return _render(
@@ -1155,6 +1201,9 @@ def create_app(
     @app.get("/patch/{packet_id}/download")
     async def download_patch(request: Request, packet_id: str) -> PlainTextResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None:
             return PlainTextResponse("Packet not found.", status_code=404)
@@ -1167,6 +1216,9 @@ def create_app(
     @app.get("/resume/{packet_id}", response_class=HTMLResponse)
     async def rewritten_resume_page(request: Request, packet_id: str) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None or packet.report.rewritten_resume is None:
             return _render(
@@ -1194,6 +1246,9 @@ def create_app(
     @app.get("/resume/{packet_id}/export.docx")
     async def rewritten_resume_docx(request: Request, packet_id: str) -> Response:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None or packet.report.rewritten_resume is None:
             return Response("Packet not found.", status_code=404)
@@ -1207,6 +1262,9 @@ def create_app(
     @app.get("/resume/{packet_id}/export.pdf")
     async def rewritten_resume_pdf(request: Request, packet_id: str) -> Response:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None or packet.report.rewritten_resume is None:
             return Response("Packet not found.", status_code=404)
@@ -1220,6 +1278,9 @@ def create_app(
     @app.get("/plan/{packet_id}", response_class=HTMLResponse)
     async def plan_page(request: Request, packet_id: str) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None:
             return _render(
@@ -1249,6 +1310,9 @@ def create_app(
     @app.get("/interview/{packet_id}", response_class=HTMLResponse)
     async def interview_page(request: Request, packet_id: str, session_id: str = "") -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if packet is None:
             return _render(
@@ -1282,6 +1346,9 @@ def create_app(
     @app.post("/interview/{packet_id}/start")
     async def interview_start(request: Request, packet_id: str):
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         result = runtime.service.create_interview_session(packet_id=packet_id, user_id=viewer.user_id)
         if result is None:
             return RedirectResponse(url=f"/interview/{packet_id}", status_code=303)
@@ -1296,6 +1363,9 @@ def create_app(
         answer: str = Form(""),
     ):
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         if not answer.strip():
             return RedirectResponse(url=f"/interview/{packet_id}?session_id={session_id}", status_code=303)
         result = runtime.service.submit_interview_answer(
@@ -1312,6 +1382,9 @@ def create_app(
     @app.get("/compare", response_class=HTMLResponse)
     async def compare_page(request: Request) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         return _render(
             request,
             "compare.html",
@@ -1336,6 +1409,9 @@ def create_app(
         resume: UploadFile | None = File(default=None),
     ):
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         jd_texts = [jd_1, jd_2, jd_3, jd_4, jd_5]
         if resume is None or not resume.filename:
             return _render(
@@ -1403,6 +1479,9 @@ def create_app(
     @app.get("/compare/{comparison_id}", response_class=HTMLResponse)
     async def comparison_results_page(request: Request, comparison_id: str, sort: str = "priority") -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         comparison = runtime.service.tracker.get_comparison(comparison_id)
         if comparison is None or comparison.user_id != viewer.user_id:
             return _render(
@@ -1435,6 +1514,9 @@ def create_app(
         sort: str = "newest",
     ) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
+        auth_redirect = _require_authentication(request, viewer)
+        if auth_redirect is not None:
+            return auth_redirect
         entries = _history_entries(runtime.service.tracker.list_entries(viewer.user_id), status_filter=status, sort_order=sort)
         selected_packet = _get_user_packet(runtime, viewer.user_id, packet_id)
         if selected_packet is None and entries:

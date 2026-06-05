@@ -6,7 +6,7 @@
 <main class="flex-1 w-full max-w-6xl mx-auto px-6 py-12 md:py-20">
   <div class="space-y-10">
     <nav class="flex items-center gap-2 text-sm text-gray-400">
-      <a href="/?packet_id={{ packet.packet_id }}" class="hover:text-[#6B8E83] transition-colors">Analysis</a>
+      <a href="/diagnose?packet_id={{ packet.packet_id }}" class="hover:text-[#986848] transition-colors">Analysis</a>
       {{ icon_svg("lucide:chevron-right") }}
       <span class="text-gray-900 font-medium">Rewritten Resume</span>
     </nav>
@@ -17,7 +17,7 @@
         <p class="text-lg text-gray-500">Structured rewrite for <span class="text-gray-900 font-medium italic">{{ packet.job_requirements.role_title }}</span> at <span class="text-gray-900 font-medium">{{ packet.job_requirements.company_name }}</span></p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
-        <a href="/resume/{{ packet.packet_id }}/export.docx" class="px-6 py-3 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+        <a href="/resume/{{ packet.packet_id }}/export.docx" class="px-6 py-3 bg-[#986848] hover:bg-[#683820] text-white rounded-xl font-semibold transition-all flex items-center gap-2">
           {{ icon_svg("lucide:file-down") }} Export DOCX
         </a>
         <a href="/resume/{{ packet.packet_id }}/export.pdf" class="px-6 py-3 bg-white border border-[#EBE9E4] text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-all flex items-center gap-2">
@@ -54,7 +54,7 @@
               {% for item in section.items %}
               <li class="text-sm leading-7 text-gray-700 {% if section.title != 'Header' %}pl-5 relative{% endif %}">
                 {% if section.title != 'Header' %}
-                <span class="absolute left-0 top-2 w-2 h-2 rounded-full bg-[#6B8E83]"></span>
+                <span class="absolute left-0 top-2 w-2 h-2 rounded-full bg-[#986848]"></span>
                 {% endif %}
                 {{ item | replace("[confirm measurable outcome or scope]", '<span class="edit-placeholder">confirm measurable outcome or scope</span>') | safe }}
               </li>
@@ -93,7 +93,7 @@
     </div>
     <section class="workflow-primary-card flex flex-col md:flex-row md:items-center md:justify-between gap-6">
       <div class="max-w-xl space-y-2">
-        <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Next best step</p>
+        <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Next best step</p>
         <h2 class="text-3xl font-medium">Practice saying the evidence out loud.</h2>
         <p class="text-sm text-gray-500 leading-6">Interview practice checks whether the same proof points in this resume are clear, relevant, and specific when spoken.</p>
       </div>

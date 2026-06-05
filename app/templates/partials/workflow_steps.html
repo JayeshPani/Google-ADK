@@ -3,7 +3,7 @@
     "key": "analysis",
     "label": "Diagnose",
     "description": "Understand the fit decision and the biggest evidence gaps.",
-    "href": "/?packet_id=" ~ packet.packet_id,
+    "href": "/diagnose?packet_id=" ~ packet.packet_id,
   },
   {
     "key": "patch",
@@ -46,7 +46,7 @@
 <section class="workflow-panel" aria-label="Recommended workflow">
   <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
     <div class="max-w-2xl space-y-2">
-      <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Recommended workflow</p>
+      <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Recommended workflow</p>
       <h2 class="text-2xl font-medium">{{ workflow_heading|default("Follow the outputs in order") }}</h2>
       <p class="text-sm text-gray-500 leading-6">{{ workflow_copy|default("Each screen builds on the one before it, so the next step is always the highest-leverage action for this packet.") }}</p>
     </div>

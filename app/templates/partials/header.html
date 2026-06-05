@@ -1,18 +1,17 @@
-<header class="site-header sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-[#EBE9E4] px-6 py-4 flex items-center justify-between">
-  <div class="flex items-center gap-3">
-    <div class="w-8 h-8 bg-[#6B8E83] rounded-lg flex items-center justify-center">
-      {{ icon_svg("lucide:layers", "text-white app-icon-lg") }}
-    </div>
-    <a href="/" class="text-xl font-semibold tracking-tight serif">Refine</a>
-  </div>
-  <nav class="hidden md:flex items-center gap-8 text-sm font-medium">
-    <a href="/" class="{{ 'text-gray-900' if active_item == 'diagnose' else 'text-gray-500 hover:text-[#6B8E83]' }} transition-colors">New Diagnosis</a>
-    <a href="/compare" class="{{ 'text-gray-900' if active_item == 'compare' else 'text-gray-500 hover:text-[#6B8E83]' }} transition-colors">Compare JDs</a>
-    <a href="/history" class="{{ 'text-gray-900' if active_item == 'history' else 'text-gray-500 hover:text-[#6B8E83]' }} transition-colors">History</a>
-    <a href="/login" class="{{ 'text-gray-900' if active_item == 'login' else 'text-gray-500 hover:text-[#6B8E83]' }} transition-colors">Account</a>
+<header class="site-header sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-[#EBE9E4] px-6 py-3">
+  <a href="/" class="brand-lockup flex items-center gap-3" aria-label="Refine home">
+    <img src="{{ static_path('img/refine-logo-header.png') }}" alt="Refine" class="brand-logo-img">
+  </a>
+  <nav class="site-nav hidden md:flex items-center gap-8 text-sm font-medium">
+    <a href="/diagnose" class="{{ 'text-gray-900' if active_item == 'diagnose' else 'text-gray-500 hover:text-[#986848]' }} transition-colors">New Diagnosis</a>
+    <a href="/compare" class="{{ 'text-gray-900' if active_item == 'compare' else 'text-gray-500 hover:text-[#986848]' }} transition-colors">Compare JDs</a>
+    <a href="/history" class="{{ 'text-gray-900' if active_item == 'history' else 'text-gray-500 hover:text-[#986848]' }} transition-colors">History</a>
+    {% if not user_authenticated %}
+    <a href="/login" class="{{ 'text-gray-900' if active_item == 'login' else 'text-gray-500 hover:text-[#986848]' }} transition-colors">Account</a>
+    {% endif %}
     <button
       type="button"
-      class="theme-toggle text-gray-400 hover:text-[#6B8E83] transition-colors"
+      class="theme-toggle text-gray-400 hover:text-[#986848] transition-colors"
       data-theme-toggle
       aria-label="Switch to dark mode"
       aria-pressed="false"
@@ -22,21 +21,18 @@
       <span class="theme-icon-moon">{{ icon_svg("lucide:moon", "app-icon-lg") }}</span>
     </button>
   </nav>
-  <div class="flex items-center gap-4">
+  <div class="site-actions flex items-center gap-4">
     {% if user_authenticated %}
-    <div class="text-sm px-4 py-2 border border-[#EBE9E4] rounded-full bg-white">
+    <div class="hidden lg:block max-w-[120px] truncate text-sm px-4 py-2 border border-[#EBE9E4] rounded-xl bg-white">
       {{ user_email }}
     </div>
-    <form method="post" action="/logout">
-      <button type="submit" class="text-sm px-4 py-2 rounded-full bg-[#6B8E83] text-white hover:bg-[#5A7A70] transition-colors">
+    <form method="post" action="/logout" class="shrink-0">
+      <button type="submit" class="whitespace-nowrap min-w-[96px] text-sm px-5 py-2.5 rounded-xl bg-[#986848] text-white hover:bg-[#683820] transition-colors">
         Sign Out
       </button>
     </form>
     {% else %}
-    <div class="text-sm px-4 py-2 border border-[#EBE9E4] rounded-full bg-white">
-      {{ user_label }}
-    </div>
-    <a href="/login?next_path={{ request.url.path }}" class="text-sm px-4 py-2 rounded-full bg-[#6B8E83] text-white hover:bg-[#5A7A70] transition-colors">
+    <a href="/login?next_path={{ request.url.path }}" class="whitespace-nowrap min-w-[88px] text-center text-sm px-5 py-2.5 rounded-xl bg-[#986848] text-white hover:bg-[#683820] transition-colors">
       Sign In
     </a>
     {% endif %}

@@ -6,7 +6,7 @@
 <main class="flex-1 w-full max-w-3xl mx-auto px-6 py-16 md:py-24">
   <section class="bg-white rounded-[28px] border border-[#EBE9E4] p-8 md:p-10 space-y-8">
     <div class="space-y-3">
-      <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Diagnosis in progress</p>
+      <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Diagnosis in progress</p>
       <h1 class="text-3xl font-medium">Preparing your quick score first</h1>
       <p class="text-sm leading-6 text-gray-500">
         Refine is parsing your resume, comparing it with the JD, and preparing the full report in stages.
@@ -19,8 +19,8 @@
     </div>
     {% else %}
     <div class="space-y-4">
-      <div class="h-2 rounded-full bg-[#F0F4F2] overflow-hidden">
-        <div id="progress-bar" class="h-full bg-[#6B8E83] transition-all duration-500" style="width: {{ job.progress_percent }}%"></div>
+      <div class="h-2 rounded-full bg-[#F5EFEA] overflow-hidden">
+        <div id="progress-bar" class="h-full bg-[#986848] transition-all duration-500" style="width: {{ job.progress_percent }}%"></div>
       </div>
       <div class="flex items-center justify-between gap-4">
         <p id="progress-step" class="text-sm font-semibold text-gray-700">{{ job.current_step }}</p>

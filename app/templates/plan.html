@@ -8,7 +8,7 @@
     <nav class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400 mb-6">
       <span>{{ packet.job_requirements.role_title }} at {{ packet.job_requirements.company_name }}</span>
       {{ icon_svg("lucide:chevron-right") }}
-      <span class="text-[#6B8E83]">Action Plan</span>
+      <span class="text-[#986848]">Action Plan</span>
     </nav>
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12">
       <div class="space-y-4">
@@ -23,7 +23,7 @@
           <div class="timeline-dot {% if loop.first %}active{% endif %}"></div>
           {% endfor %}
         </div>
-        <p class="text-xs text-[#6B8E83] font-semibold mt-1">Day 1 of {{ plan_cards|length }} tasks</p>
+        <p class="text-xs text-[#986848] font-semibold mt-1">Day 1 of {{ plan_cards|length }} tasks</p>
       </div>
     </div>
     <div class="mb-10">
@@ -37,7 +37,7 @@
     <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
       {% for card in plan_cards[:5] %}
       <div class="space-y-4">
-        <div class="p-6 {% if loop.first %}bg-white shadow-sm hover:border-[#6B8E83]{% else %}bg-white/60 opacity-80{% endif %} rounded-3xl border border-[#EBE9E4] transition-all">
+        <div class="p-6 {% if loop.first %}bg-white shadow-sm hover:border-[#986848]{% else %}bg-white/60 opacity-80{% endif %} rounded-3xl border border-[#EBE9E4] transition-all">
           <span class="serif text-xl block mb-4 {% if not loop.first %}text-gray-400{% endif %}">{{ card.day }}</span>
           <div class="space-y-6">
             <div class="space-y-2">
@@ -64,8 +64,8 @@
       {% for card in learning_cards %}
       <div class="p-6 bg-white rounded-3xl border border-[#EBE9E4] space-y-4 flex flex-col justify-between h-full">
         <div class="space-y-2">
-          <div class="w-10 h-10 bg-[#F0F4F2] rounded-xl flex items-center justify-center">
-            {{ icon_svg(card.icon, "text-[#6B8E83] app-icon-lg") }}
+          <div class="w-10 h-10 bg-[#F5EFEA] rounded-xl flex items-center justify-center">
+            {{ icon_svg(card.icon, "text-[#986848] app-icon-lg") }}
           </div>
           <h4 class="font-bold">{{ card.title }}</h4>
           <p class="text-xs text-gray-500 leading-relaxed">{{ card.description }}</p>
@@ -94,7 +94,7 @@
               <details class="group bg-white rounded-2xl border border-[#EBE9E4] overflow-hidden">
                 <summary class="flex items-center justify-between px-5 py-4 cursor-pointer list-none">
                   <span class="text-sm font-semibold">{{ card.question }}</span>
-                  {{ icon_svg("lucide:chevron-down", "text-[#6B8E83] summary-chevron") }}
+                  {{ icon_svg("lucide:chevron-down", "text-[#986848] summary-chevron") }}
                 </summary>
                 <div class="px-5 pb-5 text-sm text-gray-600 border-t border-gray-50 pt-3">
                   <p class="text-xs leading-relaxed">{{ card.guidance }}</p>
@@ -111,7 +111,7 @@
 
   <section class="workflow-primary-card flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-20">
     <div class="max-w-xl space-y-2">
-      <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Next best step</p>
+      <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Next best step</p>
       <h2 class="text-3xl font-medium">Review the rewritten resume draft.</h2>
       <p class="text-sm text-gray-500 leading-6">Now that the work is ordered, inspect the final draft and export only after confirming any placeholders or measurable outcomes.</p>
     </div>
@@ -125,7 +125,7 @@
         <a href="/patch/{{ packet.packet_id }}">{{ icon_svg("lucide:file-pen-line") }} Patch</a>
         <a href="/interview/{{ packet.packet_id }}">{{ icon_svg("lucide:mic") }} Interview</a>
         <a href="/history?packet_id={{ packet.packet_id }}">{{ icon_svg("lucide:bookmark") }} Save</a>
-        <a href="/?packet_id={{ packet.packet_id }}">Results</a>
+        <a href="/diagnose?packet_id={{ packet.packet_id }}">Results</a>
       </div>
     </div>
   </section>

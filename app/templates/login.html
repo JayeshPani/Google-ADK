@@ -7,24 +7,24 @@
   <section class="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-10 items-start">
     <div class="space-y-8">
       <div class="space-y-3">
-        <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Persistent history</p>
-        <h1 class="text-4xl md:text-5xl font-medium">Save every diagnosis to your account.</h1>
+        <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Welcome to Refine</p>
+        <h1 class="text-4xl md:text-5xl font-medium">Sign in, then let's improve your next application.</h1>
         <p class="text-lg text-gray-500 max-w-2xl">
-          Sign in to keep job packets, patches, and action plans across browser restarts and devices.
+          Your resume, job matches, edits, and interview practice stay together in one place, so you can come back anytime and keep moving from where you left off.
         </p>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="bg-white border border-[#EBE9E4] rounded-[24px] p-6">
-          <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Keep History</p>
-          <p class="text-sm text-gray-600">Your saved analyses follow your account instead of a guest cookie.</p>
+          <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Pick Up Easily</p>
+          <p class="text-sm text-gray-600">Return to past diagnoses, compare results, and resume drafts without starting over.</p>
         </div>
         <div class="bg-white border border-[#EBE9E4] rounded-[24px] p-6">
-          <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Migrate Guest Work</p>
-          <p class="text-sm text-gray-600">Any packets created in this browser are moved into your account automatically.</p>
+          <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Get Better Guidance</p>
+          <p class="text-sm text-gray-600">Refine can use your saved work to give more useful next steps for each role.</p>
         </div>
         <div class="bg-white border border-[#EBE9E4] rounded-[24px] p-6">
-          <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Secure Access</p>
-          <p class="text-sm text-gray-600">Email and password login with signed sessions for returning access.</p>
+          <p class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Stay Organized</p>
+          <p class="text-sm text-gray-600">Keep every application plan tied to your account, not a single browser session.</p>
         </div>
       </div>
     </div>
@@ -32,8 +32,8 @@
     <div class="bg-white rounded-[32px] border border-[#EBE9E4] shadow-sm overflow-hidden">
       <div class="p-8 md:p-10 space-y-6">
         <div class="flex gap-3">
-          <a href="/login?mode=signin&next_path={{ next_path }}" class="flex-1 text-center px-4 py-3 rounded-2xl border {{ 'bg-[#6B8E83] text-white border-[#6B8E83]' if auth_mode == 'signin' else 'bg-white text-gray-500 border-[#EBE9E4]' }}">Sign In</a>
-          <a href="/login?mode=signup&next_path={{ next_path }}" class="flex-1 text-center px-4 py-3 rounded-2xl border {{ 'bg-[#6B8E83] text-white border-[#6B8E83]' if auth_mode == 'signup' else 'bg-white text-gray-500 border-[#EBE9E4]' }}">Create Account</a>
+          <a href="/login?mode=signin&next_path={{ next_path }}" class="flex-1 text-center px-4 py-3 rounded-2xl border {{ 'bg-[#986848] text-white border-[#986848]' if auth_mode == 'signin' else 'bg-white text-gray-500 border-[#EBE9E4]' }}">Sign In</a>
+          <a href="/login?mode=signup&next_path={{ next_path }}" class="flex-1 text-center px-4 py-3 rounded-2xl border {{ 'bg-[#986848] text-white border-[#986848]' if auth_mode == 'signup' else 'bg-white text-gray-500 border-[#EBE9E4]' }}">Create Account</a>
         </div>
 
         {% if auth_error %}
@@ -61,13 +61,13 @@
           <input type="hidden" name="next_path" value="{{ next_path }}">
           <div>
             <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Email</label>
-            <input type="email" name="email" required class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm" placeholder="you@example.com">
+            <input type="email" name="email" required class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm" placeholder="you@example.com">
           </div>
           <div>
             <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Password</label>
-            <input type="password" name="password" required minlength="8" class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm" placeholder="At least 8 characters">
+            <input type="password" name="password" required minlength="8" class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm" placeholder="At least 8 characters">
           </div>
-          <button type="submit" class="w-full px-6 py-4 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-2xl font-semibold transition-all">
+          <button type="submit" class="w-full px-6 py-4 bg-[#986848] hover:bg-[#683820] text-white rounded-2xl font-semibold transition-all">
             Create Account
           </button>
         </form>
@@ -76,13 +76,13 @@
           <input type="hidden" name="next_path" value="{{ next_path }}">
           <div>
             <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Email</label>
-            <input type="email" name="email" required class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm" placeholder="you@example.com">
+            <input type="email" name="email" required class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm" placeholder="you@example.com">
           </div>
           <div>
             <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Password</label>
-            <input type="password" name="password" required class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm" placeholder="Your password">
+            <input type="password" name="password" required class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm" placeholder="Your password">
           </div>
-          <button type="submit" class="w-full px-6 py-4 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-2xl font-semibold transition-all">
+          <button type="submit" class="w-full px-6 py-4 bg-[#986848] hover:bg-[#683820] text-white rounded-2xl font-semibold transition-all">
             Sign In
           </button>
         </form>

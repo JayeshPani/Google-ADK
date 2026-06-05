@@ -19,7 +19,7 @@
 <main class="flex-1 w-full max-w-6xl mx-auto px-6 py-8 md:py-12">
   <div class="flex flex-col gap-8">
     <nav class="flex items-center gap-2 text-sm text-gray-400">
-      <a href="/?packet_id={{ packet.packet_id }}" class="hover:text-[#6B8E83] transition-colors">Analysis</a>
+      <a href="/diagnose?packet_id={{ packet.packet_id }}" class="hover:text-[#986848] transition-colors">Analysis</a>
       {{ icon_svg("lucide:chevron-right") }}
       <span class="text-gray-900 font-medium">Patch Details</span>
     </nav>
@@ -46,7 +46,7 @@
 
     <div class="bg-white rounded-[32px] border border-[#EBE9E4] p-6 flex flex-wrap items-center gap-8 shadow-sm">
       <div class="flex items-center gap-4 border-r border-[#EBE9E4] pr-8">
-        <div class="px-4 py-2 rounded-full {{ packet_meta.badge_class }} text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+        <div class="{{ packet_meta.badge_class }} decision-badge gap-2">
           {{ icon_svg("lucide:alert-circle") }} {{ packet_meta.label }}
         </div>
       </div>
@@ -60,7 +60,7 @@
           <span class="text-xl font-semibold">{{ packet.report.top_gaps[0].title if packet.report.top_gaps else "Evidence strength" }}</span>
         </div>
       </div>
-      <div class="ml-auto flex items-center gap-2 text-xs font-medium text-[#6B8E83]">
+      <div class="ml-auto flex items-center gap-2 text-xs font-medium text-[#986848]">
         {{ icon_svg("lucide:check-circle") }}
         <span>Analyzing against {{ packet.report.matched_skills|length + packet.report.missing_skills|length }} core skill signals</span>
       </div>
@@ -78,11 +78,11 @@
         <nav class="flex gap-8">
           {% for section_name in ["summary", "experience", "project", "skills", "education"] %}
             {% if patch_sections.get(section_name) %}
-            <a href="#{{ section_name }}-section" class="text-sm font-bold uppercase tracking-widest {% if loop.first %}text-[#6B8E83] border-b-2 border-[#6B8E83]{% else %}text-gray-400 hover:text-[#6B8E83]{% endif %} pb-2 transition-all">{{ section_name }}</a>
+            <a href="#{{ section_name }}-section" class="text-sm font-bold uppercase tracking-widest {% if loop.first %}text-[#986848] border-b-2 border-[#986848]{% else %}text-gray-400 hover:text-[#986848]{% endif %} pb-2 transition-all">{{ section_name }}</a>
             {% endif %}
           {% endfor %}
         </nav>
-        <a href="/plan/{{ packet.packet_id }}" class="text-xs text-[#6B8E83] font-semibold uppercase tracking-wider hover:underline">Proceed to action plan</a>
+        <a href="/plan/{{ packet.packet_id }}" class="text-xs text-[#986848] font-semibold uppercase tracking-wider hover:underline">Proceed to action plan</a>
       </div>
     </div>
 
@@ -91,7 +91,7 @@
       <section id="{{ section_name }}-section" class="space-y-6">
         <div class="flex items-center gap-4">
           <h2 class="text-3xl font-medium">{{ section_name|title }}</h2>
-          <span class="px-2 py-1 rounded bg-[#F0F4F2] text-[#6B8E83] text-[10px] font-bold uppercase tracking-tighter">{{ edits|length }} Patch{{ "" if edits|length == 1 else "es" }} Available</span>
+          <span class="px-2 py-1 rounded bg-[#F5EFEA] text-[#986848] text-[10px] font-bold uppercase tracking-tighter">{{ edits|length }} Patch{{ "" if edits|length == 1 else "es" }} Available</span>
         </div>
         <div class="space-y-8">
           {% for edit in edits %}
@@ -106,8 +106,8 @@
               </div>
               <div class="p-8 relative">
                 <div class="flex justify-between items-start mb-4">
-                  <span class="text-[10px] font-bold text-[#6B8E83] uppercase tracking-widest">Refined Patch</span>
-                  {{ icon_svg("lucide:copy", "text-[#6B8E83]") }}
+                  <span class="text-[10px] font-bold text-[#986848] uppercase tracking-widest">Refined Patch</span>
+                  {{ icon_svg("lucide:copy", "text-[#986848]") }}
                 </div>
                 <p class="text-gray-900 leading-relaxed font-medium">{{ edit.rewritten_text }}</p>
               </div>
@@ -115,7 +115,7 @@
             <div class="bg-gray-50 p-6 border-t border-[#EBE9E4] flex flex-col md:flex-row gap-6 md:items-center">
               <div class="flex-1 space-y-2">
                 <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
-                  {{ icon_svg("lucide:help-circle", "text-[#6B8E83]") }} Why this edit?
+                  {{ icon_svg("lucide:help-circle", "text-[#986848]") }} Why this edit?
                 </div>
                 <p class="text-sm text-gray-600">{{ edit.reason }}</p>
               </div>
@@ -133,7 +133,7 @@
 
       <div class="workflow-primary-card flex flex-col md:flex-row md:items-center md:justify-between gap-6">
         <div class="max-w-xl space-y-2">
-          <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Next best step</p>
+          <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Next best step</p>
           <h3 class="text-2xl font-medium">Turn the edits into a 1-week improvement plan.</h3>
           <p class="text-sm text-gray-500 leading-6">The roadmap orders the highest-impact work so you know what to fix, practice, and verify first.</p>
         </div>

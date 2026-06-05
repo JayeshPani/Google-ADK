@@ -65,8 +65,10 @@ class WebAppTests(unittest.TestCase):
         self.optimizer = FakeOptimizer()
         self.app = create_app(settings=self.settings, runtime=self.runtime, optimizer=self.optimizer)
         self.client = TestClient(self.app)
-        self.user_id = "guest-webapp"
-        self.client.cookies.set(COOKIE_NAME, self.user_id)
+        self.user = self.app.state.auth_service.register(email="test@example.com", password="password123")
+        self.user_id = self.user.user_id
+        session_token = self.app.state.auth_service.create_session_token(self.user, ttl_seconds=3600)
+        self.client.cookies.set(SESSION_COOKIE_NAME, session_token)
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -79,6 +81,29 @@ class WebAppTests(unittest.TestCase):
 
     def test_home_page_renders(self) -> None:
         response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Know what to fix before the next application.", response.text)
+        self.assertIn("Get Started", response.text)
+        self.assertIn('/login?next_path=/diagnose', response.text)
+        self.assertIn("Resume diagnosis", response.text)
+        self.assertIn("JD comparison", response.text)
+        self.assertIn("/static/css/app.css", response.text)
+        self.assertNotIn("http://testserver/static/", response.text)
+        self.assertNotIn("cdn.tailwindcss.com", response.text)
+        self.assertNotIn("code.iconify.design", response.text)
+        self.assertNotIn("api.fontshare.com", response.text)
+        self.assertIn("data-theme-toggle", response.text)
+        self.assertIn("refine_theme", response.text)
+        self.assertIn("theme-icon-sun", response.text)
+        self.assertIn("theme-icon-moon", response.text)
+        self.assertNotIn('href="/settings"', response.text)
+        self.assertNotIn(">Account</a>", response.text)
+        self.assertNotIn("Guest ", response.text)
+        self.assertIn("test@example.com", response.text)
+
+    def test_diagnose_page_renders_for_signed_in_user(self) -> None:
+        response = self.client.get("/diagnose")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Diagnose the gap.", response.text)
@@ -94,6 +119,9 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("theme-icon-sun", response.text)
         self.assertIn("theme-icon-moon", response.text)
         self.assertNotIn('href="/settings"', response.text)
+        self.assertNotIn(">Account</a>", response.text)
+        self.assertNotIn("Guest ", response.text)
+        self.assertIn("test@example.com", response.text)
 
     def test_static_css_route_serves_local_bundle(self) -> None:
         response = self.client.get("/static/css/app.css")
@@ -102,12 +130,27 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("text/css", response.headers["content-type"])
 
     def test_login_page_renders(self) -> None:
-        response = self.client.get("/login")
+        anonymous_client = TestClient(self.app)
+        response = anonymous_client.get("/login")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Save every diagnosis to your account.", response.text)
+        self.assertIn("Sign in, then let", response.text)
+        self.assertIn("Pick Up Easily", response.text)
         self.assertIn("Sign In", response.text)
         self.assertIn("Continue with Google", response.text)
+        self.assertNotIn("Guest ", response.text)
+
+    def test_unauthenticated_users_start_on_login_before_diagnosis(self) -> None:
+        anonymous_client = TestClient(self.app)
+
+        home = anonymous_client.get("/")
+        self.assertEqual(home.status_code, 200)
+        self.assertIn("Know what to fix before the next application.", home.text)
+
+        response = anonymous_client.get("/diagnose", follow_redirects=False)
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/login?next_path=%2Fdiagnose")
 
     def test_compare_page_includes_resume_preview_controls(self) -> None:
         response = self.client.get("/compare")
@@ -119,7 +162,8 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("Resume Preview", response.text)
 
     def test_google_oauth_start_sets_state_cookie_and_redirects(self) -> None:
-        response = self.client.get("/auth/google/start?next_path=/history", follow_redirects=False)
+        anonymous_client = TestClient(self.app)
+        response = anonymous_client.get("/auth/google/start?next_path=/history", follow_redirects=False)
 
         self.assertEqual(response.status_code, 303)
         self.assertIn("accounts.google.com", response.headers["location"])
@@ -158,7 +202,7 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(progress_page.status_code, 200)
         self.assertIn("Diagnosis in progress", progress_page.text)
 
-        result_page = self.client.get(f"/?packet_id={payload['packet_id']}&job_id={job_id}")
+        result_page = self.client.get(f"/diagnose?packet_id={payload['packet_id']}&job_id={job_id}")
         self.assertEqual(result_page.status_code, 200)
         self.assertIn("Analysis Complete", result_page.text)
         self.assertIn("arjun_backend_student.txt", result_page.text)
@@ -205,7 +249,9 @@ class WebAppTests(unittest.TestCase):
         ).packet
 
         foreign_client = TestClient(self.app)
-        foreign_client.cookies.set(COOKIE_NAME, "guest-other")
+        foreign_user = self.app.state.auth_service.register(email="other@example.com", password="password123")
+        foreign_token = self.app.state.auth_service.create_session_token(foreign_user, ttl_seconds=3600)
+        foreign_client.cookies.set(SESSION_COOKIE_NAME, foreign_token)
         response = foreign_client.get(f"/patch/{packet.packet_id}")
 
         self.assertEqual(response.status_code, 200)
@@ -311,7 +357,7 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("Finish Full Report", page.text)
         self.assertNotIn("Rewritten Resume", page.text)
 
-    def test_compare_direct_post_sets_guest_cookie_for_redirect_result(self) -> None:
+    def test_compare_direct_post_requires_login(self) -> None:
         direct_client = TestClient(self.app)
         response = direct_client.post(
             "/compare",
@@ -324,10 +370,8 @@ class WebAppTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 303)
-        self.assertIn(COOKIE_NAME, response.headers.get("set-cookie", ""))
-        page = direct_client.get(response.headers["location"])
-        self.assertEqual(page.status_code, 200)
-        self.assertIn("Apply Priority", page.text)
+        self.assertEqual(response.headers["location"], "/login?next_path=%2Fcompare")
+        self.assertNotIn(COOKIE_NAME, response.headers.get("set-cookie", ""))
 
     def test_compare_validation_requires_resume_and_two_jds(self) -> None:
         no_resume = self.client.post(
@@ -379,15 +423,18 @@ class WebAppTests(unittest.TestCase):
         self.assertIsNotNone(completed_packet.report.rewritten_resume)
 
     def test_signup_migrates_guest_history_and_sets_session_cookie(self) -> None:
+        guest_client = TestClient(self.app)
+        guest_user_id = "guest-webapp"
+        guest_client.cookies.set(COOKIE_NAME, guest_user_id)
         packet = self.runtime.service.diagnose(
             resume_path=self._resume_fixture(),
             jd_text=self._jd_fixture_text(),
-            user_id=self.user_id,
+            user_id=guest_user_id,
             session_id="session-3",
             persist=True,
         ).packet
 
-        response = self.client.post(
+        response = guest_client.post(
             "/signup",
             data={"email": "jayesh@example.com", "password": "supersecure123", "next_path": "/history"},
             follow_redirects=False,
@@ -399,19 +446,20 @@ class WebAppTests(unittest.TestCase):
 
         user = self.app.state.auth_service.user_repository.load_by_email("jayesh@example.com")
         self.assertIsNotNone(user)
-        self.assertEqual(self.runtime.service.tracker.list_entries(self.user_id), [])
+        self.assertEqual(self.runtime.service.tracker.list_entries(guest_user_id), [])
         migrated = self.runtime.service.tracker.get(packet.packet_id)
         self.assertIsNotNone(migrated)
         self.assertEqual(migrated.user_id, user.user_id)
 
-        history = self.client.get("/history")
+        history = guest_client.get("/history")
         self.assertEqual(history.status_code, 200)
         self.assertIn(packet.resume_name, history.text)
         self.assertNotIn("This history belongs to a guest session.", history.text)
 
     def test_google_oauth_callback_sets_session_cookie(self) -> None:
-        response = self.client.get("/auth/google/start?next_path=/history", follow_redirects=False)
-        state_cookie = self.client.cookies.get(GOOGLE_STATE_COOKIE_NAME)
+        anonymous_client = TestClient(self.app)
+        response = anonymous_client.get("/auth/google/start?next_path=/history", follow_redirects=False)
+        state_cookie = anonymous_client.cookies.get(GOOGLE_STATE_COOKIE_NAME)
         self.assertTrue(state_cookie)
 
         fake_user = self.app.state.auth_service.register(email="google@example.com", password="password123")
@@ -420,7 +468,7 @@ class WebAppTests(unittest.TestCase):
             "authenticate_google_code",
             new=mock.AsyncMock(return_value=fake_user),
         ):
-            callback = self.client.get(
+            callback = anonymous_client.get(
                 f"/auth/google/callback?state={state_cookie}&code=fake-code",
                 follow_redirects=False,
             )

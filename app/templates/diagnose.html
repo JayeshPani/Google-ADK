@@ -68,13 +68,13 @@
           <div class="space-y-6">
             <div>
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Resume</label>
-              <label class="relative group border-2 border-dashed border-[#EBE9E4] rounded-2xl p-8 transition-all hover:border-[#6B8E83] hover:bg-[#F0F4F2]/30 cursor-pointer text-center block">
+              <label class="relative group border-2 border-dashed border-[#EBE9E4] rounded-2xl p-8 transition-all hover:border-[#986848] hover:bg-[#F5EFEA]/30 cursor-pointer text-center block">
                 <input type="file" name="resume" class="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf,.docx,.txt,.md" id="resume-input">
-                {{ icon_svg("lucide:upload-cloud", "w-20 h-20 mx-auto text-gray-300 group-hover:text-[#6B8E83] mb-4 transition-colors") }}
+                {{ icon_svg("lucide:upload-cloud", "w-20 h-20 mx-auto text-gray-300 group-hover:text-[#986848] mb-4 transition-colors") }}
                 <p class="text-sm text-gray-600"><span class="font-semibold">Upload Resume</span> or drag and drop</p>
                 <p class="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD</p>
               </label>
-              <div class="mt-3 flex items-center gap-2 text-xs text-[#6B8E83] font-medium {% if demo_case_key %}hidden{% endif %}" id="resume-loaded">
+              <div class="mt-3 flex items-center gap-2 text-xs text-[#986848] font-medium {% if demo_case_key %}hidden{% endif %}" id="resume-loaded">
                 {{ icon_svg("lucide:file-check", "w-4 h-4") }}
                 <span id="resume-file-label">{{ resume_hint if resume_hint else "No file selected" }}</span>
               </div>
@@ -109,11 +109,11 @@
             </div>
             <div>
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Rejection Notes (Optional)</label>
-              <textarea name="rejection_notes" placeholder="Paste recruiter feedback or rejection email snippets here..." class="w-full h-32 px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm resize-none">{{ form_state.rejection_notes }}</textarea>
+              <textarea name="rejection_notes" placeholder="Paste recruiter feedback or rejection email snippets here..." class="w-full h-32 px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm resize-none">{{ form_state.rejection_notes }}</textarea>
             </div>
             <div>
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Demo Case (Optional)</label>
-              <select name="demo_case" class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm">
+              <select name="demo_case" class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm">
                 <option value="">Use my own resume</option>
                 {% for key, demo in demo_cases.items() %}
                 <option value="{{ key }}" {% if form_state.demo_case == key %}selected{% endif %}>{{ demo.label }}</option>
@@ -125,7 +125,7 @@
           <div class="space-y-6">
             <div>
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Job Description</label>
-              <textarea name="jd_text" placeholder="Paste the full job description or role requirements..." class="w-full h-[452px] px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm resize-none">{{ form_state.jd_text if form_state.jd_text else demo_jd }}</textarea>
+              <textarea name="jd_text" placeholder="Paste the full job description or role requirements..." class="w-full h-[452px] px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm resize-none">{{ form_state.jd_text if form_state.jd_text else demo_jd }}</textarea>
             </div>
           </div>
         </div>
@@ -135,7 +135,7 @@
             <span class="px-3 py-1.5 rounded-full bg-gray-100 text-gray-600">{{ "ADK live" if runtime_status.adk_enabled else "Deterministic fallback" }}</span>
             <span class="px-3 py-1.5 rounded-full bg-gray-100 text-gray-600">Phoenix: {{ runtime_status.phoenix_project }}</span>
           </div>
-          <button type="submit" class="w-full md:w-auto px-10 py-4 bg-[#6B8E83] hover:bg-[#5A7A70] text-white rounded-2xl font-semibold shadow-lg shadow-[#6B8E83]/20 transition-all transform active:scale-[0.98]">
+          <button type="submit" class="w-full md:w-auto px-10 py-4 bg-[#986848] hover:bg-[#683820] text-white rounded-2xl font-semibold shadow-lg shadow-[#986848]/20 transition-all transform active:scale-[0.98]">
             Run Diagnosis
           </button>
         </div>
@@ -146,7 +146,7 @@
   <section id="diagnosis-results" class="pt-4 space-y-12 animate-in slide-in-from-bottom-8 duration-1000">
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-[#EBE9E4] pb-8">
       <div class="space-y-2">
-        <div><span class="text-xs font-bold text-[#6B8E83] uppercase tracking-widest">Analysis Complete</span></div>
+        <div><span class="text-xs font-bold text-[#986848] uppercase tracking-widest">Analysis Complete</span></div>
         <h2 class="text-3xl font-medium">{{ packet.job_requirements.role_title or "Untitled role" }} <span class="text-gray-400 font-normal">at</span> {{ packet.job_requirements.company_name or "Target company" }}</h2>
         <p class="text-gray-500 flex items-center gap-2">
           {{ icon_svg("lucide:file-text", "app-icon-lg") }} {{ packet.resume_name }}
@@ -155,9 +155,9 @@
       <div class="flex items-center gap-3">
         <div class="px-6 py-3 rounded-2xl flex items-center gap-3 {{ packet_meta.badge_class }}">
           {{ icon_svg("lucide:alert-circle", "app-icon-lg") }}
-          <div class="flex flex-col">
+          <div class="flex flex-col leading-tight">
             <span class="text-[10px] font-bold uppercase">Recommendation</span>
-            <span class="text-sm font-semibold">{{ packet_meta.label }}</span>
+            <span class="text-sm font-semibold whitespace-nowrap">{{ packet_meta.label }}</span>
           </div>
         </div>
       </div>
@@ -232,10 +232,10 @@
         <div class="bg-white rounded-2xl border border-[#EBE9E4] p-5 space-y-3">
           <div class="flex items-center justify-between gap-3">
             <p class="text-sm font-semibold">{{ check.title }}</p>
-            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest {% if check.status == 'pass' %}bg-emerald-50 text-emerald-700 border border-emerald-200{% elif check.status == 'warn' %}bg-amber-50 text-amber-700 border border-amber-200{% else %}bg-rose-50 text-rose-700 border border-rose-200{% endif %}">{{ check.status }}</span>
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest {% if check.status == 'pass' %}bg-[#F5EFEA] text-[#986848] border border-[#D8B99D]{% elif check.status == 'warn' %}bg-amber-50 text-amber-700 border border-amber-200{% else %}bg-rose-50 text-rose-700 border border-rose-200{% endif %}">{{ check.status }}</span>
           </div>
           <p class="text-sm text-gray-600">{{ check.details }}</p>
-          <p class="text-xs text-[#6B8E83] font-medium">{{ check.recommendation }}</p>
+          <p class="text-xs text-[#986848] font-medium">{{ check.recommendation }}</p>
         </div>
         {% endfor %}
       </div>
@@ -243,7 +243,7 @@
     <div class="space-y-10">
       <div class="flex items-center justify-between">
         <h3 class="text-3xl font-medium">The Patch <span class="text-gray-400 font-normal">— Exact Edits</span></h3>
-        <a href="/patch/{{ packet.packet_id }}" class="text-sm text-[#6B8E83] font-semibold flex items-center gap-2 hover:underline">
+        <a href="/patch/{{ packet.packet_id }}" class="text-sm text-[#986848] font-semibold flex items-center gap-2 hover:underline">
           Open full patch plan {{ icon_svg("lucide:arrow-right") }}
         </a>
       </div>
@@ -263,10 +263,10 @@
                 <p class="text-sm text-gray-500 italic">{{ edit.original_text }}</p>
               </div>
               <div class="p-6 space-y-3">
-                <span class="text-[10px] font-bold text-[#6B8E83] uppercase">After (Recommended)</span>
+                <span class="text-[10px] font-bold text-[#986848] uppercase">After (Recommended)</span>
                 <p class="text-sm leading-relaxed text-gray-800">{{ edit.rewritten_text }}</p>
                 <div class="pt-3 flex items-start gap-2 text-xs text-gray-500">
-                  {{ icon_svg("lucide:info", "text-[#6B8E83]") }}
+                  {{ icon_svg("lucide:info", "text-[#986848]") }}
                   <span><span class="font-semibold">Why:</span> {{ edit.reason }}</span>
                 </div>
               </div>
@@ -298,13 +298,13 @@
           <h3 class="text-2xl font-medium mb-6">Interview Prep</h3>
           <div class="space-y-4">
             {% for question in packet.report.interview_questions[:3] %}
-            <div class="group p-5 bg-white rounded-2xl border border-[#EBE9E4] hover:border-[#6B8E83] transition-all">
+            <div class="group p-5 bg-white rounded-2xl border border-[#EBE9E4] hover:border-[#986848] transition-all">
               <div class="flex justify-between items-start">
                 <div>
-                  <p class="text-xs font-bold text-[#6B8E83] uppercase tracking-tighter mb-1">Prompt {{ loop.index }}</p>
+                  <p class="text-xs font-bold text-[#986848] uppercase tracking-tighter mb-1">Prompt {{ loop.index }}</p>
                   <p class="font-semibold text-sm">{{ question }}</p>
                 </div>
-                {{ icon_svg("lucide:chevron-right", "text-gray-300 group-hover:text-[#6B8E83]") }}
+                {{ icon_svg("lucide:chevron-right", "text-gray-300 group-hover:text-[#986848]") }}
               </div>
             </div>
             {% endfor %}
@@ -314,7 +314,7 @@
     </div>
     <div class="workflow-primary-card flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-20">
       <div class="max-w-xl space-y-2">
-        <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">Next best step</p>
+        <p class="text-xs font-bold uppercase tracking-widest text-[#986848]">Next best step</p>
         <h3 class="text-2xl font-medium">Review the exact resume patch before doing anything else.</h3>
         <p class="text-sm text-gray-500 leading-6">The patch page shows what to change, why it matters, and which evidence gap each edit is targeting.</p>
       </div>
@@ -336,7 +336,7 @@
   {% endif %}
 </main>
 <div id="loading-overlay" class="fixed inset-0 z-50 bg-white/90 backdrop-blur-sm flex-col items-center justify-center">
-  <div class="w-16 h-16 border-4 border-[#F0F4F2] border-t-[#6B8E83] rounded-full animate-spin mb-6"></div>
+  <div class="w-16 h-16 border-4 border-[#F5EFEA] border-t-[#986848] rounded-full animate-spin mb-6"></div>
   <p class="serif text-2xl animate-pulse">Starting diagnosis...</p>
   <div class="mt-4 space-y-2 text-sm text-gray-500 text-center">
     <p id="loading-step">Uploading resume and job description</p>

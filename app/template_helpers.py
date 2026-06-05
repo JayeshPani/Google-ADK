@@ -162,6 +162,32 @@ _STROKE_ICON_BODIES: dict[str, str] = {
         <circle cx="11" cy="11" r="7"/>
         <path d="m20 20-3.5-3.5"/>
     """,
+    "lucide:search-check": """
+        <circle cx="11" cy="11" r="7"/>
+        <path d="m20 20-3.5-3.5"/>
+        <path d="m8.5 11.5 1.5 1.5 3.5-4"/>
+    """,
+    "lucide:scale": """
+        <path d="m16 16 3-8 3 8c-.9.7-1.8 1-3 1s-2.1-.3-3-1Z"/>
+        <path d="m2 16 3-8 3 8c-.9.7-1.8 1-3 1s-2.1-.3-3-1Z"/>
+        <path d="M7 21h10"/>
+        <path d="M12 3v18"/>
+        <path d="M3 8h18"/>
+    """,
+    "lucide:map": """
+        <path d="M14.5 5.5 9.5 3 3 6.5v14l6.5-3.5 5 2.5 6.5-3.5v-14l-6.5 3.5Z"/>
+        <path d="M9.5 3v14"/>
+        <path d="M14.5 5.5v14"/>
+    """,
+    "lucide:messages-square": """
+        <path d="M21 14a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>
+        <path d="M8 9h8"/>
+        <path d="M8 12h5"/>
+    """,
+    "lucide:bookmark-check": """
+        <path d="M7 3h10a2 2 0 0 1 2 2v16l-7-4-7 4V5a2 2 0 0 1 2-2Z"/>
+        <path d="m9 10 2 2 4-4"/>
+    """,
     "lucide:bar-chart-2": """
         <path d="M4 20V10"/>
         <path d="M10 20V4"/>
