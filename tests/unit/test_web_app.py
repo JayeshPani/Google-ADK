@@ -242,6 +242,11 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn("Transcript and Feedback", page.text)
         self.assertIn("Coach Feedback", page.text)
+        self.assertIn("What worked", page.text)
+        self.assertIn("Improve next", page.text)
+        self.assertIn("Evidence to prepare", page.text)
+        self.assertIn("Answer structure", page.text)
+        self.assertNotIn("Suggested evidence to mention next time", page.text)
 
     def test_compare_flow_creates_comparison_results(self) -> None:
         response = self.client.post(

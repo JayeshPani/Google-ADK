@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -10,7 +10,8 @@ import re
 from typing import Any
 import uuid
 
-from job_rejection_agent.analysis import extract_job_requirements, extract_resume_facts, score_resume_match
+from job_rejection_agent.analysis import ScoreBundle, extract_job_requirements, extract_resume_facts, score_resume_match
+from job_rejection_agent.analysis.jd_requirements import split_hard_and_soft_requirements
 from job_rejection_agent.coaching import (
     generate_action_plan,
     generate_interview_questions,
@@ -44,6 +45,9 @@ class DiagnosticSessionResult:
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+_DECISIONS = {"apply_now", "apply_after_patch", "defer", "not_fit"}
 
 
 class GeminiAugmenter:
@@ -153,6 +157,22 @@ class GeminiAugmenter:
                 normalized_items.append(normalized)
         return normalized_items
 
+    def _skill_evidence(self, resume_text: str, skills: list[str], existing: dict[str, list[str]]) -> dict[str, list[str]]:
+        evidence = {skill: list(snippets) for skill, snippets in existing.items()}
+        sentences = [item.strip() for item in re.split(r"(?<=[.!?])\s+|\n", resume_text) if item.strip()]
+        for skill in skills:
+            if evidence.get(skill):
+                continue
+            variants = {skill, skill.replace("ml", "machine learning"), skill.replace("dl", "deep learning")}
+            snippets = [
+                sentence
+                for sentence in sentences
+                if any(variant and variant in sentence.lower() for variant in variants)
+            ]
+            if snippets:
+                evidence[skill] = snippets[:3]
+        return evidence
+
     def refine_resume_facts(self, resume_facts: ResumeFacts) -> ResumeFacts:
         prompt = f"""
 Return only JSON with keys summary, skills, projects.
@@ -182,7 +202,7 @@ Resume:
             education=resume_facts.education,
             metrics=resume_facts.metrics,
             inferred_level=resume_facts.inferred_level,
-            evidence_by_skill=resume_facts.evidence_by_skill,
+            evidence_by_skill=self._skill_evidence(resume_facts.normalized_text, merged_skills, resume_facts.evidence_by_skill),
             ats_findings=resume_facts.ats_findings,
             contact_signals=resume_facts.contact_signals,
             header_lines=resume_facts.header_lines,
@@ -192,7 +212,9 @@ Resume:
 
     def refine_job_requirements(self, requirements: JobRequirements, jd_text: str) -> JobRequirements:
         prompt = f"""
-Return only JSON with keys role_summary, required_skills, preferred_skills, keywords, experience_level.
+Return only JSON with keys role_summary, required_skills, preferred_skills, keywords, soft_requirements, experience_level.
+Put hard technical tools, languages, frameworks, and platforms in required_skills/preferred_skills.
+Put generic phrases like "ability to manage tasks", communication, coordination, presentations, and stakeholder skills in soft_requirements.
 Do not invent tools not present in the job description.
 
 Job description:
@@ -204,24 +226,176 @@ Job description:
         base_required_skills = self._normalize_text_list(requirements.required_skills, lowercase=True)
         base_preferred_skills = self._normalize_text_list(requirements.preferred_skills, lowercase=True)
         base_keywords = self._normalize_text_list(requirements.keywords, lowercase=True)
+        payload_required, required_soft = split_hard_and_soft_requirements(
+            self._normalize_text_list(payload.get("required_skills"), lowercase=True)
+        )
+        payload_preferred, preferred_soft = split_hard_and_soft_requirements(
+            self._normalize_text_list(payload.get("preferred_skills"), lowercase=True)
+        )
+        _, keyword_soft = split_hard_and_soft_requirements(
+            self._normalize_text_list(payload.get("keywords"), lowercase=True)
+        )
+        _, explicit_soft = split_hard_and_soft_requirements(
+            self._normalize_text_list(payload.get("soft_requirements"), lowercase=True)
+        )
+        safe_keywords = [
+            item
+            for item in self._normalize_text_list(payload.get("keywords"), lowercase=True)
+            if item not in {soft.lower() for soft in [*required_soft, *preferred_soft, *keyword_soft, *explicit_soft]}
+        ]
+        required_skills = sorted(set(base_required_skills) | set(payload_required))
+        preferred_skills = sorted((set(base_preferred_skills) | set(payload_preferred)) - set(required_skills))
+        soft_requirements = list(
+            dict.fromkeys(
+                [
+                    *requirements.soft_requirements,
+                    *required_soft,
+                    *preferred_soft,
+                    *keyword_soft,
+                    *explicit_soft,
+                ]
+            )
+        )[:8]
         return JobRequirements(
             role_title=requirements.role_title,
             company_name=requirements.company_name,
             role_summary=self._normalize_text(payload.get("role_summary")) or requirements.role_summary,
-            required_skills=sorted(
-                set(base_required_skills)
-                | set(self._normalize_text_list(payload.get("required_skills"), lowercase=True))
-            ),
-            preferred_skills=sorted(
-                set(base_preferred_skills)
-                | set(self._normalize_text_list(payload.get("preferred_skills"), lowercase=True))
-            ),
-            keywords=sorted(
-                set(base_keywords) | set(self._normalize_text_list(payload.get("keywords"), lowercase=True))
-            ),
+            required_skills=required_skills,
+            preferred_skills=preferred_skills,
+            keywords=sorted(set(base_keywords) | set(safe_keywords)),
             responsibilities=requirements.responsibilities,
+            soft_requirements=soft_requirements,
             experience_level=self._normalize_text(payload.get("experience_level")) or requirements.experience_level,
             ats_checks=requirements.ats_checks,
+        )
+
+    def _score_value(self, payload: dict[str, Any], key: str) -> float | None:
+        value = payload.get(key)
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            score = float(value)
+        elif isinstance(value, str):
+            try:
+                score = float(value.strip().removesuffix("/10"))
+            except ValueError:
+                return None
+        else:
+            return None
+        if score < 0 or score > 10:
+            return None
+        return round(score, 1)
+
+    def _score_rationale(self, payload: dict[str, Any], baseline: ScoreBundle) -> dict[str, str]:
+        source = payload.get("rationale") or payload.get("score_rationale")
+        if not isinstance(source, dict):
+            return baseline.score_rationale or {}
+        rationale: dict[str, str] = {}
+        for key in ("overall", "ats", "evidence", "level_fit", "decision"):
+            value = self._normalize_text(source.get(key))
+            if value:
+                rationale[key] = value[:260]
+        return rationale or (baseline.score_rationale or {})
+
+    def _score_review_is_valid(
+        self,
+        *,
+        scores: dict[str, float],
+        decision: str,
+        requirements: JobRequirements,
+        baseline: ScoreBundle,
+    ) -> bool:
+        required_count = len(requirements.required_skills)
+        missing_ratio = len(baseline.missing_skills) / max(1, required_count)
+        mostly_matched = missing_ratio <= 0.25 and baseline.score_level_fit >= 6.0 and baseline.score_evidence >= 6.0
+        if mostly_matched and (decision in {"defer", "not_fit"} or scores["overall"] < 6.5):
+            return False
+        if decision == "apply_now" and (missing_ratio > 0.35 or scores["level_fit"] < 7.0 or scores["evidence"] < 6.2):
+            return False
+        if missing_ratio >= 0.55 and decision == "apply_now":
+            return False
+        if abs(scores["ats"] - baseline.score_ats) > 3.5:
+            return False
+        return True
+
+    def review_scores(self, resume_facts: ResumeFacts, requirements: JobRequirements, baseline: ScoreBundle) -> ScoreBundle:
+        prompt = f"""
+Return only JSON with keys overall, ats, evidence, level_fit, recommended_decision, rationale.
+You are the Match Analyst scoring reviewer. Score the candidate for this specific role.
+Use hard required skills for missing-skill penalties. Treat soft requirements only as coaching context.
+Recommended decision must be one of apply_now, apply_after_patch, defer, not_fit.
+
+Baseline:
+{json.dumps({
+    "overall": baseline.score_overall,
+    "ats": baseline.score_ats,
+    "evidence": baseline.score_evidence,
+    "level_fit": baseline.score_level_fit,
+    "matched_skills": baseline.matched_skills,
+    "missing_skills": baseline.missing_skills,
+    "under_evidenced_skills": baseline.under_evidenced_skills,
+    "decision": baseline.recommended_decision,
+}, ensure_ascii=True)}
+
+Job:
+{json.dumps({
+    "role_title": requirements.role_title,
+    "company_name": requirements.company_name,
+    "hard_required_skills": requirements.required_skills,
+    "preferred_skills": requirements.preferred_skills,
+    "soft_requirements": requirements.soft_requirements,
+    "responsibilities": requirements.responsibilities[:6],
+    "experience_level": requirements.experience_level,
+}, ensure_ascii=True)}
+
+Resume evidence:
+{json.dumps({
+    "skills": resume_facts.skills,
+    "projects": resume_facts.projects[:6],
+    "experiences": resume_facts.experiences[:6],
+    "metrics": resume_facts.metrics[:8],
+    "level": resume_facts.inferred_level,
+}, ensure_ascii=True)}
+"""
+        payload = self._call(prompt)
+        if not payload:
+            return baseline
+        scores = {
+            "overall": self._score_value(payload, "overall"),
+            "ats": self._score_value(payload, "ats"),
+            "evidence": self._score_value(payload, "evidence"),
+            "level_fit": self._score_value(payload, "level_fit"),
+        }
+        if any(value is None for value in scores.values()):
+            return baseline
+        typed_scores = {key: float(value) for key, value in scores.items() if value is not None}
+        decision = self._normalize_text(payload.get("recommended_decision")) or ""
+        if decision not in _DECISIONS:
+            return baseline
+        if not self._score_review_is_valid(
+            scores=typed_scores,
+            decision=decision,
+            requirements=requirements,
+            baseline=baseline,
+        ):
+            return baseline
+        rationale = self._score_rationale(payload, baseline)
+        summary = rationale.get(
+            "overall",
+            f"Overall fit is {typed_scores['overall']}/10 after AI scoring review.",
+        )
+        if not summary.lower().startswith("overall fit"):
+            summary = f"Overall fit is {typed_scores['overall']}/10. {summary}"
+        return replace(
+            baseline,
+            score_overall=typed_scores["overall"],
+            score_ats=typed_scores["ats"],
+            score_evidence=typed_scores["evidence"],
+            score_level_fit=typed_scores["level_fit"],
+            recommended_decision=decision,
+            narrative_summary=summary,
+            scoring_source="gemini",
+            score_rationale=rationale,
         )
 
 
@@ -253,6 +427,10 @@ class DiagnosticService:
             used_llm = True
 
         bundle = score_resume_match(resume_facts, requirements, rejection_signals)
+        reviewed_bundle = self.augmenter.review_scores(resume_facts, requirements, bundle)
+        if reviewed_bundle.scoring_source != bundle.scoring_source:
+            used_llm = True
+        bundle = reviewed_bundle
         draft_report = DiagnosticReport(
             score_overall=bundle.score_overall,
             score_ats=bundle.score_ats,
@@ -272,6 +450,8 @@ class DiagnosticService:
             provenance=bundle.provenance,
             recommended_decision=bundle.recommended_decision,
             narrative_summary=bundle.narrative_summary,
+            scoring_source=bundle.scoring_source,
+            score_rationale=bundle.score_rationale or {},
         )
         rewrite_package = generate_rewrite_package(resume_facts, requirements, draft_report)
         report_without_resume = DiagnosticReport(
@@ -293,6 +473,8 @@ class DiagnosticService:
             provenance=bundle.provenance,
             recommended_decision=bundle.recommended_decision,
             narrative_summary=bundle.narrative_summary,
+            scoring_source=bundle.scoring_source,
+            score_rationale=bundle.score_rationale or {},
         )
         rewritten_resume = generate_rewritten_resume(
             resume_facts,
@@ -319,6 +501,8 @@ class DiagnosticService:
             provenance=report_without_resume.provenance,
             recommended_decision=report_without_resume.recommended_decision,
             narrative_summary=report_without_resume.narrative_summary,
+            scoring_source=report_without_resume.scoring_source,
+            score_rationale=report_without_resume.score_rationale,
         )
         packet = SavedJobPacket.new(
             user_id=user_id,
@@ -341,7 +525,7 @@ class DiagnosticService:
         packet = self.tracker.get(packet_id)
         if packet is None or packet.user_id != user_id:
             return None
-        session = start_interview_session(packet)
+        session = start_interview_session(packet, settings=self.settings)
         packet.interview_sessions.append(session)
         packet.updated_at = _utc_now_iso()
         self.tracker.save(packet)
@@ -361,7 +545,7 @@ class DiagnosticService:
         for index, session in enumerate(packet.interview_sessions):
             if session.session_id != session_id:
                 continue
-            updated = submit_interview_answer(packet, session, answer)
+            updated = submit_interview_answer(packet, session, answer, settings=self.settings)
             updated.updated_at = _utc_now_iso()
             packet.interview_sessions[index] = updated
             packet.updated_at = _utc_now_iso()

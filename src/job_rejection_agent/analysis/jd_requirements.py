@@ -23,6 +23,72 @@ LEVEL_TOKENS = [
     ("intern", "student"),
 ]
 
+_KNOWN_HARD_SKILLS = {normalize_skill_name(skill) for skill in TECH_SKILL_LEXICON}
+_CONTACT_PATTERN = re.compile(r"(@|https?://|www\.|linkedin|github|portfolio|\+?\d[\d\s().-]{7,}\d)", re.IGNORECASE)
+_SOFT_REQUIREMENT_PATTERN = re.compile(
+    r"\b(ability to|able to|coordinate|manage tasks?|multiple activities|prepare presentations?|"
+    r"prepare data summaries?|communication|communicate|collaborate|stakeholders?|organized|"
+    r"attention to detail|work independently|team player|time management|prioriti[sz]e)\b",
+    re.IGNORECASE,
+)
+_HARD_SKILL_ALIASES = {
+    "rest apis": "rest api",
+    "restful api": "rest api",
+    "restful apis": "rest api",
+    "apis": "rest api",
+    "llms": "llm",
+    "large language model": "llm",
+    "large language models": "llm",
+    "google cloud platform": "gcp",
+}
+
+
+def _clean_requirement_text(value: str) -> str:
+    return " ".join(value.strip(" -*•.:;").split()).strip()
+
+
+def _canonical_hard_skill(value: str) -> str:
+    text = _clean_requirement_text(value).lower()
+    if not text or _CONTACT_PATTERN.search(text):
+        return ""
+    if text in _HARD_SKILL_ALIASES:
+        return _HARD_SKILL_ALIASES[text]
+    normalized = normalize_skill_name(text)
+    if normalized in _KNOWN_HARD_SKILLS:
+        return normalized
+    for skill in sorted(TECH_SKILL_LEXICON, key=len, reverse=True):
+        pattern = r"(?<![a-z0-9+.#-])" + re.escape(skill) + r"(?![a-z0-9+.#-])"
+        if re.search(pattern, text):
+            return normalize_skill_name(skill)
+    return ""
+
+
+def _is_soft_requirement(value: str) -> bool:
+    text = _clean_requirement_text(value)
+    return bool(text and not _CONTACT_PATTERN.search(text) and _SOFT_REQUIREMENT_PATTERN.search(text))
+
+
+def split_hard_and_soft_requirements(values: list[str]) -> tuple[list[str], list[str]]:
+    hard: list[str] = []
+    soft: list[str] = []
+    hard_seen: set[str] = set()
+    soft_seen: set[str] = set()
+    for value in values:
+        cleaned = _clean_requirement_text(value)
+        if not cleaned or _CONTACT_PATTERN.search(cleaned):
+            continue
+        canonical = _canonical_hard_skill(cleaned)
+        if canonical and canonical not in hard_seen:
+            hard_seen.add(canonical)
+            hard.append(canonical)
+            continue
+        if _is_soft_requirement(cleaned):
+            key = cleaned.lower()
+            if key not in soft_seen:
+                soft_seen.add(key)
+                soft.append(cleaned[:180])
+    return sorted(hard), soft[:8]
+
 
 def _extract_title_and_company(lines: list[str]) -> tuple[str, str]:
     if not lines:
@@ -62,6 +128,11 @@ def _extract_responsibilities(parsed: ParsedJobDescription) -> list[str]:
     return fallback[:6]
 
 
+def _extract_soft_requirements(responsibilities: list[str]) -> list[str]:
+    _, soft_requirements = split_hard_and_soft_requirements(responsibilities)
+    return soft_requirements
+
+
 def _extract_level(text: str) -> str:
     lowered = text.lower()
     if "new grad" in lowered or "entry-level" in lowered or "entry level" in lowered:
@@ -99,6 +170,7 @@ def extract_job_requirements(parsed_job_description: ParsedJobDescription) -> Jo
     role_title, company_name = _extract_title_and_company(parsed_job_description.lines)
     required_skills, preferred_skills, keywords = _extract_skills(parsed_job_description.normalized_text)
     responsibilities = _extract_responsibilities(parsed_job_description)
+    soft_requirements = _extract_soft_requirements(responsibilities)
     role_summary = responsibilities[0] if responsibilities else parsed_job_description.lines[0] if parsed_job_description.lines else ""
     ats_checks = []
     if len(required_skills) >= 6:
@@ -113,6 +185,7 @@ def extract_job_requirements(parsed_job_description: ParsedJobDescription) -> Jo
         preferred_skills=preferred_skills,
         keywords=keywords,
         responsibilities=responsibilities,
+        soft_requirements=soft_requirements,
         experience_level=_extract_level(parsed_job_description.normalized_text),
         ats_checks=ats_checks,
     )

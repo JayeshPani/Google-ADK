@@ -5,6 +5,38 @@ from __future__ import annotations
 from job_rejection_agent.domain import ATSCheckResult, EvidenceGap, JobRequirements, ProvenanceNote, ResumeFacts
 from job_rejection_agent.ingestion.rejection_notes import RejectionSignals
 
+_ACTION_TERMS = {
+    "analyzed",
+    "automated",
+    "built",
+    "cleaned",
+    "created",
+    "deployed",
+    "designed",
+    "developed",
+    "implemented",
+    "improved",
+    "integrated",
+    "led",
+    "optimized",
+    "reduced",
+    "shipped",
+    "tested",
+    "trained",
+    "used",
+}
+
+
+def _has_meaningful_evidence(snippets: list[str]) -> bool:
+    for snippet in snippets:
+        lowered = snippet.lower()
+        has_action = any(term in lowered for term in _ACTION_TERMS)
+        has_metric = any(char.isdigit() for char in snippet)
+        has_context = any(token in lowered for token in ("project", "api", "pipeline", "dashboard", "model", "service", "system"))
+        if has_action or has_metric or has_context:
+            return True
+    return False
+
 
 def build_gap_inventory(
     resume_facts: ResumeFacts,
@@ -23,17 +55,16 @@ def build_gap_inventory(
 
     for skill in matched_skills:
         evidence = resume_facts.evidence_by_skill.get(skill, [])
-        has_metric = any(any(char.isdigit() for char in snippet) for snippet in evidence)
-        if len(evidence) < 2 or not has_metric:
+        if not _has_meaningful_evidence(evidence):
             under_evidenced_skills.append(skill)
             gaps.append(
                 EvidenceGap(
                     category="under_evidenced_skill",
                     title=f"{skill.title()} is present but weakly evidenced",
                     severity="medium",
-                    details=f"The resume mentions {skill} but does not clearly show depth, results, or shipped outcomes.",
-                    recommended_fix=f"Add a bullet that ties {skill} to a real project outcome or measurable result.",
-                    supporting_evidence=evidence[:2] or [f"No strong snippets found for {skill}."],
+                    details=f"The resume mentions {skill} but does not clearly connect it to project work, ownership, or outcomes.",
+                    recommended_fix=f"Add or revise one bullet that ties {skill} to a real project action and result.",
+                    supporting_evidence=evidence[:2] or [f"No contextual resume snippet found for {skill}."],
                 )
             )
 

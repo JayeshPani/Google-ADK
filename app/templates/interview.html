@@ -65,7 +65,7 @@
               <p class="text-xs font-bold uppercase tracking-widest text-[#6B8E83]">{{ session.status.replace('_', ' ') }}</p>
               <h2 class="text-2xl font-medium mt-2">Session {{ session.session_id[:8] }}</h2>
             </div>
-            <p class="text-sm text-gray-400">{{ session.turns|length }} / {{ session.questions|length }} answered</p>
+            <p class="text-sm text-gray-400">{{ session.turns|length }} / 5 answered</p>
           </div>
 
           {% if session.status == "in_progress" %}
@@ -123,12 +123,37 @@
             <div class="rounded-2xl bg-amber-50 border border-amber-100 p-5 space-y-3">
               <p class="text-sm font-semibold text-amber-900">Coach Feedback</p>
               <p class="text-sm text-amber-900/90">{{ turn.feedback.feedback }}</p>
-              {% if turn.feedback.suggested_evidence %}
-              <div class="space-y-2">
-                <p class="text-[10px] font-bold uppercase tracking-widest text-amber-700">Suggested evidence to mention next time</p>
-                {% for evidence in turn.feedback.suggested_evidence %}
-                <p class="text-xs text-amber-900">{{ evidence }}</p>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {% if turn.feedback.strengths %}
+                <div class="rounded-xl bg-white/60 border border-amber-100 p-4 space-y-2">
+                  <p class="text-[10px] font-bold uppercase tracking-widest text-amber-700">What worked</p>
+                  {% for item in turn.feedback.strengths %}
+                  <p class="text-xs leading-5 text-amber-900">{{ item }}</p>
+                  {% endfor %}
+                </div>
+                {% endif %}
+                {% if turn.feedback.improvements %}
+                <div class="rounded-xl bg-white/60 border border-amber-100 p-4 space-y-2">
+                  <p class="text-[10px] font-bold uppercase tracking-widest text-amber-700">Improve next</p>
+                  {% for item in turn.feedback.improvements %}
+                  <p class="text-xs leading-5 text-amber-900">{{ item }}</p>
+                  {% endfor %}
+                </div>
+                {% endif %}
+              </div>
+              {% set evidence_items = turn.feedback.evidence_prompts or turn.feedback.suggested_evidence %}
+              {% if evidence_items %}
+              <div class="rounded-xl bg-white/60 border border-amber-100 p-4 space-y-2">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-amber-700">Evidence to prepare</p>
+                {% for evidence in evidence_items %}
+                <p class="text-xs leading-5 text-amber-900">{{ evidence }}</p>
                 {% endfor %}
+              </div>
+              {% endif %}
+              {% if turn.feedback.answer_structure %}
+              <div class="rounded-xl bg-white/60 border border-amber-100 p-4 space-y-2">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-amber-700">Answer structure</p>
+                <p class="text-xs leading-5 text-amber-900">{{ turn.feedback.answer_structure }}</p>
               </div>
               {% endif %}
             </div>

@@ -27,6 +27,8 @@ class ScoreBundle:
     provenance: list[ProvenanceNote]
     recommended_decision: str
     narrative_summary: str
+    scoring_source: str = "deterministic"
+    score_rationale: dict[str, str] | None = None
 
 
 def _score_ats(ats_checks: list[ATSCheckResult]) -> float:
@@ -38,24 +40,43 @@ def _score_ats(ats_checks: list[ATSCheckResult]) -> float:
     return round(max(3.0, score), 1)
 
 
-def _score_evidence(matched_skills: list[str], missing_skills: list[str], under_evidenced_skills: list[str], required_count: int) -> float:
+def _score_evidence(
+    matched_skills: list[str],
+    missing_skills: list[str],
+    under_evidenced_skills: list[str],
+    required_count: int,
+    resume_facts: ResumeFacts,
+) -> float:
     if required_count == 0:
-        return 7.0
-    match_ratio = len(matched_skills) / required_count
-    missing_penalty = min(len(missing_skills) * 0.9, 4.0)
-    evidence_penalty = min(len(under_evidenced_skills) * 0.5, 2.5)
-    score = (match_ratio * 10.0) - missing_penalty - evidence_penalty
+        base = 6.8
+    else:
+        match_ratio = len(matched_skills) / required_count
+        missing_ratio = len(missing_skills) / required_count
+        under_ratio = len(under_evidenced_skills) / max(1, len(matched_skills))
+        base = 4.0 + (match_ratio * 4.6) - min(missing_ratio * 2.4, 2.4) - min(under_ratio * 1.0, 1.0)
+    project_bonus = 0.5 if resume_facts.projects else 0.0
+    metric_bonus = 0.7 if resume_facts.metrics else 0.0
+    experience_bonus = 0.3 if resume_facts.experiences else 0.0
+    score = base + project_bonus + metric_bonus + experience_bonus
+    if required_count > 0 and missing_skills:
+        missing_ratio = len(missing_skills) / required_count
+        score = min(score, 7.4 if missing_ratio > 0.3 else 8.4)
     return round(max(2.0, min(score, 9.8)), 1)
 
 
-def _recommend(overall: float, level_score: float, missing_count: int) -> str:
-    if overall >= 7.8 and missing_count <= 1:
-        return "apply_now"
-    if overall >= 6.0 and level_score >= 5.5:
-        return "apply_after_patch"
-    if level_score < 4.5 or missing_count >= 4:
+def _recommend(overall: float, evidence_score: float, level_score: float, missing_count: int, required_count: int) -> str:
+    missing_ratio = missing_count / max(1, required_count)
+    if level_score <= 4.0 and overall < 6.0:
+        return "not_fit"
+    if missing_ratio >= 0.6 and overall < 6.5:
         return "defer"
-    return "not_fit"
+    if overall >= 8.0 and missing_ratio <= 0.15 and level_score >= 7.5 and evidence_score >= 7.2:
+        return "apply_now"
+    if overall >= 6.5 and missing_ratio <= 0.4 and level_score >= 5.0:
+        return "apply_after_patch"
+    if overall >= 5.8 and missing_count <= 1 and level_score >= 6.0:
+        return "apply_after_patch"
+    return "defer"
 
 
 def score_resume_match(
@@ -85,16 +106,24 @@ def score_resume_match(
         matched_skills,
         missing_skills,
         under_evidenced_skills,
-        max(1, len(requirements.required_skills)),
+        len(requirements.required_skills),
+        resume_facts,
     )
     score_level_fit = round(level_assessment.score, 1)
     score_overall = round((score_ats * 0.25) + (score_evidence * 0.45) + (score_level_fit * 0.30), 1)
-    decision = _recommend(score_overall, score_level_fit, len(missing_skills))
+    decision = _recommend(score_overall, score_evidence, score_level_fit, len(missing_skills), len(requirements.required_skills))
     summary = (
         f"Overall fit is {score_overall}/10. The strongest alignment is in "
         f"{', '.join(matched_skills[:3]) or 'general technical foundation'}, "
         f"but the biggest rejection risk comes from {gaps[0].title.lower() if gaps else 'thin evidence'}."
     )
+    rationale = {
+        "overall": "Weighted blend of ATS readiness, hard-skill evidence, and seniority alignment.",
+        "ats": "Deterministic pass/warn/fail checks over structure, contact signals, readability, keywords, and file hygiene.",
+        "evidence": "Hard-skill coverage plus project, experience, and metric evidence; soft requirements are excluded from missing-skill penalties.",
+        "level_fit": level_assessment.narrative,
+        "decision": f"Decision uses hard missing-skill ratio, evidence score, and level fit; missing hard skills={len(missing_skills)}.",
+    }
     return ScoreBundle(
         score_overall=score_overall,
         score_ats=score_ats,
@@ -109,4 +138,5 @@ def score_resume_match(
         provenance=provenance[:8],
         recommended_decision=decision,
         narrative_summary=summary,
+        score_rationale=rationale,
     )

@@ -92,6 +92,7 @@ class JobRequirements:
     preferred_skills: list[str] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
     responsibilities: list[str] = field(default_factory=list)
+    soft_requirements: list[str] = field(default_factory=list)
     experience_level: str = "entry"
     ats_checks: list[str] = field(default_factory=list)
 
@@ -100,7 +101,18 @@ class JobRequirements:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "JobRequirements":
-        return cls(**payload)
+        return cls(
+            role_title=payload["role_title"],
+            company_name=payload["company_name"],
+            role_summary=payload["role_summary"],
+            required_skills=payload.get("required_skills", []),
+            preferred_skills=payload.get("preferred_skills", []),
+            keywords=payload.get("keywords", []),
+            responsibilities=payload.get("responsibilities", []),
+            soft_requirements=payload.get("soft_requirements", []),
+            experience_level=payload.get("experience_level", "entry"),
+            ats_checks=payload.get("ats_checks", []),
+        )
 
 
 @dataclass(slots=True)
@@ -191,13 +203,29 @@ class InterviewFeedback:
     gap_score: float
     feedback: str
     suggested_evidence: list[str] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    improvements: list[str] = field(default_factory=list)
+    evidence_prompts: list[str] = field(default_factory=list)
+    answer_structure: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return _serialize(self)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "InterviewFeedback":
-        return cls(**payload)
+        return cls(
+            overall_score=payload["overall_score"],
+            evidence_score=payload["evidence_score"],
+            clarity_score=payload["clarity_score"],
+            relevance_score=payload["relevance_score"],
+            gap_score=payload["gap_score"],
+            feedback=payload["feedback"],
+            suggested_evidence=payload.get("suggested_evidence", []),
+            strengths=payload.get("strengths", []),
+            improvements=payload.get("improvements", []),
+            evidence_prompts=payload.get("evidence_prompts", payload.get("suggested_evidence", [])),
+            answer_structure=payload.get("answer_structure", ""),
+        )
 
 
 @dataclass(slots=True)
@@ -316,6 +344,8 @@ class DiagnosticReport:
     provenance: list[ProvenanceNote]
     recommended_decision: Literal["apply_now", "apply_after_patch", "defer", "not_fit"]
     narrative_summary: str
+    scoring_source: str = "deterministic"
+    score_rationale: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return _serialize(self)
@@ -341,6 +371,8 @@ class DiagnosticReport:
             provenance=[ProvenanceNote.from_dict(item) for item in payload["provenance"]],
             recommended_decision=payload["recommended_decision"],
             narrative_summary=payload["narrative_summary"],
+            scoring_source=payload.get("scoring_source", "deterministic"),
+            score_rationale=payload.get("score_rationale", {}),
         )
 
     def to_markdown(self) -> str:
