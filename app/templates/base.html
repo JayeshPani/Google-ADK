@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          const storedTheme = localStorage.getItem("refine_theme");
+          const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.dataset.theme = storedTheme || (prefersDark ? "dark" : "light");
+        } catch (error) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
     <title>{% block title %}Refine{% endblock %}</title>
     <link rel="stylesheet" href="{{ static_path('css/app.css') }}">
     {% block head_extra %}{% endblock %}
@@ -14,5 +25,30 @@
       {% include "partials/footer.html" %}
     </div>
     {% block scripts %}{% endblock %}
+    <script>
+      (function () {
+        const button = document.querySelector("[data-theme-toggle]");
+        if (!button) return;
+
+        function applyTheme(theme) {
+          const nextTheme = theme === "dark" ? "dark" : "light";
+          document.documentElement.dataset.theme = nextTheme;
+          button.setAttribute("aria-pressed", String(nextTheme === "dark"));
+          button.setAttribute("aria-label", nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+          button.title = nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+        }
+
+        applyTheme(document.documentElement.dataset.theme);
+        button.addEventListener("click", function () {
+          const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+          try {
+            localStorage.setItem("refine_theme", nextTheme);
+          } catch (error) {
+            // The visual toggle still works when storage is unavailable.
+          }
+          applyTheme(nextTheme);
+        });
+      })();
+    </script>
   </body>
   </html>

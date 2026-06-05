@@ -12,6 +12,16 @@
     --border: #ebe9e4;
   }
 
+  html[data-theme="dark"] {
+    --warm-bg: #111311;
+    --warm-card: #181b18;
+    --sage: #8fb9ab;
+    --sage-hover: #a6cfc2;
+    --warm-gray: #f2efe7;
+    --border: #2e352f;
+    color-scheme: dark;
+  }
+
   html {
     scroll-behavior: smooth;
   }
@@ -57,6 +67,34 @@
   .app-icon-xl {
     width: 24px;
     height: 24px;
+  }
+
+  .theme-toggle {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+  }
+
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--sage);
+    outline-offset: 3px;
+  }
+
+  .theme-icon-sun,
+  .theme-icon-moon {
+    display: inline-flex;
+  }
+
+  .theme-icon-moon,
+  html[data-theme="dark"] .theme-icon-sun {
+    display: none;
+  }
+
+  html[data-theme="dark"] .theme-icon-moon {
+    display: inline-flex;
   }
 
   .badge-apply-now {
@@ -295,6 +333,40 @@
     background: #f9fafb;
     color: var(--warm-gray);
   }
+
+  html[data-theme="dark"] .site-header {
+    background: rgba(17, 19, 17, 0.92) !important;
+    border-color: var(--border) !important;
+  }
+
+  html[data-theme="dark"] .workflow-panel,
+  html[data-theme="dark"] .workflow-primary-card,
+  html[data-theme="dark"] .workflow-secondary-actions a,
+  html[data-theme="dark"] .workflow-secondary-actions button,
+  html[data-theme="dark"] .workflow-step-card,
+  html[data-theme="dark"] .workflow-step-card.is-complete {
+    background: var(--warm-card) !important;
+    border-color: var(--border) !important;
+    color: #d8d2c7 !important;
+  }
+
+  html[data-theme="dark"] .workflow-step-card.is-current {
+    background: #203028 !important;
+    color: #f2efe7 !important;
+  }
+
+  html[data-theme="dark"] .workflow-step-index,
+  html[data-theme="dark"] .timeline-dot {
+    background: #111311 !important;
+    border-color: var(--border) !important;
+    color: #c9c3b8 !important;
+  }
+
+  html[data-theme="dark"] .workflow-step-card.is-current .workflow-step-index {
+    background: var(--sage) !important;
+    border-color: var(--sage) !important;
+    color: #101411 !important;
+  }
 }
 
 @layer utilities {
@@ -324,6 +396,108 @@
 
   .animate-in.duration-1000 {
     animation-duration: 1s;
+  }
+
+  html[data-theme="dark"] [class~="bg-white"],
+  html[data-theme="dark"] [class~="bg-white/60"],
+  html[data-theme="dark"] [class~="bg-white/90"],
+  html[data-theme="dark"] [class~="bg-[#FDFCF9]"],
+  html[data-theme="dark"] [class~="bg-[#FDFCF9]/95"] {
+    background-color: var(--warm-card) !important;
+  }
+
+  html[data-theme="dark"] [class~="bg-[#EBE9E4]"],
+  html[data-theme="dark"] [class~="bg-[#F5F3F0]"],
+  html[data-theme="dark"] [class~="bg-[#F9F8F6]"],
+  html[data-theme="dark"] [class~="bg-gray-50"],
+  html[data-theme="dark"] [class~="bg-gray-50/30"],
+  html[data-theme="dark"] [class~="bg-gray-100"] {
+    background-color: #151815 !important;
+  }
+
+  html[data-theme="dark"] [class~="bg-[#F0F4F2]"],
+  html[data-theme="dark"] [class~="bg-emerald-50"],
+  html[data-theme="dark"] [class~="bg-green-50"] {
+    background-color: #1c2a23 !important;
+  }
+
+  html[data-theme="dark"] [class~="bg-amber-50"] {
+    background-color: #2c2113 !important;
+  }
+
+  html[data-theme="dark"] [class~="bg-rose-50"] {
+    background-color: #2b171d !important;
+  }
+
+  html[data-theme="dark"] [class~="border-[#EBE9E4]"],
+  html[data-theme="dark"] [class~="border-[#F0F4F2]"],
+  html[data-theme="dark"] [class~="border-[#F5F3F0]"],
+  html[data-theme="dark"] [class~="border-amber-100"],
+  html[data-theme="dark"] [class~="border-amber-200"],
+  html[data-theme="dark"] [class~="border-emerald-100"],
+  html[data-theme="dark"] [class~="border-emerald-200"],
+  html[data-theme="dark"] [class~="border-rose-200"],
+  html[data-theme="dark"] [class~="border-gray-50"],
+  html[data-theme="dark"] [class~="border-gray-100"],
+  html[data-theme="dark"] [class~="border-gray-200"],
+  html[data-theme="dark"] [class~="border-gray-300"] {
+    border-color: var(--border) !important;
+  }
+
+  html[data-theme="dark"] [class~="text-gray-900"],
+  html[data-theme="dark"] [class~="text-gray-800"],
+  html[data-theme="dark"] [class~="text-[#4A4540]"] {
+    color: #f2efe7 !important;
+  }
+
+  html[data-theme="dark"] [class~="text-gray-700"],
+  html[data-theme="dark"] [class~="text-gray-600"],
+  html[data-theme="dark"] [class~="text-slate-600"],
+  html[data-theme="dark"] [class~="text-gray-500"],
+  html[data-theme="dark"] [class~="text-gray-400"],
+  html[data-theme="dark"] [class~="text-gray-300"] {
+    color: #c9c3b8 !important;
+  }
+
+  html[data-theme="dark"] [class~="text-[#6B8E83]"],
+  html[data-theme="dark"] [class~="text-emerald-700"],
+  html[data-theme="dark"] [class~="text-green-700"] {
+    color: var(--sage) !important;
+  }
+
+  html[data-theme="dark"] [class~="text-amber-700"],
+  html[data-theme="dark"] [class~="text-amber-800"],
+  html[data-theme="dark"] [class~="text-amber-900"],
+  html[data-theme="dark"] [class~="text-amber-900/90"] {
+    color: #f5c26b !important;
+  }
+
+  html[data-theme="dark"] [class~="text-rose-700"],
+  html[data-theme="dark"] [class~="text-rose-800"],
+  html[data-theme="dark"] [class~="text-red-400"] {
+    color: #fda4af !important;
+  }
+
+  html[data-theme="dark"] input,
+  html[data-theme="dark"] textarea,
+  html[data-theme="dark"] select,
+  html[data-theme="dark"] pre,
+  html[data-theme="dark"] code {
+    background-color: #151815 !important;
+    border-color: var(--border) !important;
+    color: #f2efe7 !important;
+  }
+
+  html[data-theme="dark"] input::placeholder,
+  html[data-theme="dark"] textarea::placeholder {
+    color: #8f897f !important;
+  }
+
+  html[data-theme="dark"] .shadow-sm,
+  html[data-theme="dark"] .shadow-lg,
+  html[data-theme="dark"] .shadow-xl,
+  html[data-theme="dark"] .shadow-2xl {
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35) !important;
   }
 }
 

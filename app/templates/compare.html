@@ -10,7 +10,8 @@
       <p class="text-lg text-gray-500 max-w-3xl mx-auto">Upload one resume, paste up to five job descriptions, and rank which roles are worth applying to now versus after patching.</p>
     </div>
 
-    <form action="/compare" method="post" enctype="multipart/form-data" class="bg-white rounded-[32px] border border-[#EBE9E4] shadow-sm overflow-hidden p-8 md:p-12">
+    <form action="/compare" method="post" enctype="multipart/form-data" class="bg-white rounded-[32px] border border-[#EBE9E4] shadow-sm overflow-hidden p-8 md:p-12" id="compare-form">
+      <input type="hidden" name="resume_cache_key" id="compare-resume-cache-key" value="">
       <div class="space-y-8">
         {% if error_message %}
         <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800">
@@ -23,11 +24,41 @@
           <div class="space-y-4">
             <label class="block text-xs font-bold uppercase tracking-widest text-gray-400">Resume</label>
             <label class="relative group border-2 border-dashed border-[#EBE9E4] rounded-2xl p-8 transition-all hover:border-[#6B8E83] hover:bg-[#F0F4F2]/30 cursor-pointer text-center block">
-              <input type="file" name="resume" class="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf,.docx,.txt,.md">
+              <input type="file" name="resume" class="absolute inset-0 opacity-0 cursor-pointer" accept=".pdf,.docx,.txt,.md" id="compare-resume-input">
               {{ icon_svg("lucide:upload-cloud", "w-20 h-20 mx-auto text-gray-300 group-hover:text-[#6B8E83] mb-4 transition-colors") }}
               <p class="text-sm text-gray-600"><span class="font-semibold">Upload Resume</span> once for all comparisons</p>
               <p class="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD</p>
             </label>
+            <div class="mt-3 flex items-center gap-2 text-xs text-[#6B8E83] font-medium" id="compare-resume-loaded">
+              {{ icon_svg("lucide:file-check", "w-4 h-4") }}
+              <span id="compare-resume-file-label">No file selected</span>
+            </div>
+            <div id="compare-resume-preview-shell" class="resume-preview-shell hidden rounded-2xl border border-[#EBE9E4] bg-[#FDFCF9] overflow-hidden">
+              <div class="px-5 py-4 border-b border-[#EBE9E4] flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-xs font-bold uppercase tracking-widest text-gray-400">Resume Preview</p>
+                  <p class="text-sm font-semibold text-gray-700" id="compare-resume-preview-name">Uploaded file</p>
+                </div>
+                <span class="px-2.5 py-1 rounded-full bg-white border border-[#EBE9E4] text-[11px] font-semibold uppercase tracking-wider text-gray-500" id="compare-resume-preview-type">FILE</span>
+              </div>
+              <div class="p-5 space-y-4">
+                <div id="compare-resume-preview-text-block" class="hidden">
+                  <p class="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2">Parsed Text Preview</p>
+                  <pre id="compare-resume-preview-text" class="whitespace-pre-wrap break-words text-xs leading-6 text-gray-600 bg-white border border-[#EBE9E4] rounded-xl p-4 max-h-80 overflow-auto"></pre>
+                  <div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-gray-400">
+                    <span id="compare-resume-preview-lines"></span>
+                    <span id="compare-resume-preview-truncated"></span>
+                  </div>
+                </div>
+                <div id="compare-resume-preview-pdf-block" class="hidden">
+                  <p class="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2">PDF Preview</p>
+                  <iframe id="compare-resume-preview-pdf-frame" class="w-full rounded-xl border border-[#EBE9E4] bg-white min-h-[340px]" title="Resume preview"></iframe>
+                </div>
+                <div id="compare-resume-preview-empty" class="text-xs text-gray-400">
+                  Select a file to preview the uploaded resume before comparing roles.
+                </div>
+              </div>
+            </div>
             <div>
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Global Rejection Notes (Optional)</label>
               <textarea name="rejection_notes" placeholder="Anything recruiters repeatedly told you across these applications..." class="w-full h-32 px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#6B8E83] focus:border-[#6B8E83] outline-none transition-all text-sm resize-none">{{ form_state.rejection_notes }}</textarea>
@@ -49,4 +80,112 @@
     </form>
   </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/mammoth.browser.min.js"></script>
+<script>
+  const compareResumeInput = document.getElementById("compare-resume-input");
+  const compareResumeCacheKey = document.getElementById("compare-resume-cache-key");
+  const compareResumeLoaded = document.getElementById("compare-resume-loaded");
+  const compareResumeLabel = document.getElementById("compare-resume-file-label");
+  const comparePreviewShell = document.getElementById("compare-resume-preview-shell");
+  const comparePreviewName = document.getElementById("compare-resume-preview-name");
+  const comparePreviewType = document.getElementById("compare-resume-preview-type");
+  const comparePreviewTextBlock = document.getElementById("compare-resume-preview-text-block");
+  const comparePreviewText = document.getElementById("compare-resume-preview-text");
+  const comparePreviewLines = document.getElementById("compare-resume-preview-lines");
+  const comparePreviewTruncated = document.getElementById("compare-resume-preview-truncated");
+  const comparePreviewPdfBlock = document.getElementById("compare-resume-preview-pdf-block");
+  const comparePreviewPdfFrame = document.getElementById("compare-resume-preview-pdf-frame");
+  const comparePreviewEmpty = document.getElementById("compare-resume-preview-empty");
+  let compareCurrentPdfUrl = null;
+
+  const compareTruncatePreview = (text, maxChars = 2200) => {
+    const normalized = (text || "").replace(/\r\n/g, "\n").trim();
+    if (normalized.length <= maxChars) {
+      return { text: normalized, truncated: false };
+    }
+    return { text: normalized.slice(0, maxChars).trim() + "\n...", truncated: true };
+  };
+
+  const compareRenderTextPreview = (name, typeLabel, text) => {
+    if (!comparePreviewShell || !comparePreviewTextBlock || !comparePreviewText || !comparePreviewPdfBlock || !comparePreviewEmpty) {
+      return;
+    }
+    const preview = compareTruncatePreview(text);
+    comparePreviewShell.classList.remove("hidden");
+    comparePreviewName.textContent = name;
+    comparePreviewType.textContent = typeLabel;
+    comparePreviewText.textContent = preview.text || "No readable text was extracted from this file.";
+    comparePreviewLines.textContent = `${preview.text ? preview.text.split("\n").filter(line => line.trim()).length : 0} lines shown`;
+    comparePreviewTruncated.textContent = preview.truncated ? "Preview truncated for readability." : "";
+    comparePreviewTextBlock.classList.remove("hidden");
+    comparePreviewPdfBlock.classList.add("hidden");
+    comparePreviewEmpty.classList.add("hidden");
+  };
+
+  const compareRenderPdfPreview = (file) => {
+    if (!comparePreviewShell || !comparePreviewPdfBlock || !comparePreviewPdfFrame || !comparePreviewTextBlock || !comparePreviewEmpty) {
+      return;
+    }
+    if (compareCurrentPdfUrl) {
+      URL.revokeObjectURL(compareCurrentPdfUrl);
+    }
+    compareCurrentPdfUrl = URL.createObjectURL(file);
+    comparePreviewShell.classList.remove("hidden");
+    comparePreviewName.textContent = file.name;
+    comparePreviewType.textContent = "PDF";
+    comparePreviewPdfFrame.src = compareCurrentPdfUrl;
+    comparePreviewPdfBlock.classList.remove("hidden");
+    comparePreviewTextBlock.classList.add("hidden");
+    comparePreviewEmpty.classList.add("hidden");
+  };
+
+  if (compareResumeInput && compareResumeLoaded && compareResumeLabel) {
+    compareResumeInput.addEventListener("change", async () => {
+      if (!compareResumeInput.files || compareResumeInput.files.length === 0) {
+        return;
+      }
+      const file = compareResumeInput.files[0];
+      const extension = (file.name.split(".").pop() || "").toLowerCase();
+      compareResumeLoaded.classList.remove("hidden");
+      compareResumeLabel.textContent = file.name + " loaded";
+      if (compareResumeCacheKey) {
+        compareResumeCacheKey.value = "";
+      }
+
+      if (extension === "pdf") {
+        compareRenderPdfPreview(file);
+      } else if (extension === "txt" || extension === "md") {
+        compareRenderTextPreview(file.name, extension.toUpperCase(), await file.text());
+      } else if (extension === "docx" && window.mammoth) {
+        try {
+          const buffer = await file.arrayBuffer();
+          const result = await window.mammoth.extractRawText({ arrayBuffer: buffer });
+          compareRenderTextPreview(file.name, "DOCX", result.value || "Server preview is parsing...");
+        } catch (error) {
+          compareRenderTextPreview(file.name, "DOCX", "Preview could not be extracted in the browser. The server will still parse this file during comparison.");
+        }
+      } else {
+        compareRenderTextPreview(file.name, extension.toUpperCase() || "FILE", "Preview is not available for this file type in the browser, but the server will still parse it during comparison.");
+      }
+
+      try {
+        const data = new FormData();
+        data.append("resume", file);
+        const response = await fetch("/resume/preview-parse", { method: "POST", body: data });
+        const payload = await response.json();
+        if (response.ok && payload.resume_cache_key) {
+          if (compareResumeCacheKey) {
+            compareResumeCacheKey.value = payload.resume_cache_key;
+          }
+          compareRenderTextPreview(file.name, payload.file_type || extension.toUpperCase(), payload.text || "");
+        }
+      } catch (error) {
+        // Keep the browser preview visible; submit will parse again if needed.
+      }
+    });
+  }
+</script>
 {% endblock %}

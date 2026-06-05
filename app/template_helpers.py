@@ -9,7 +9,7 @@ _STROKE_ICON_BODIES: dict[str, str] = {
         <path d="m2 13 10 5 10-5"/>
         <path d="m2 18 10 5 10-5"/>
     """,
-    "lucide:settings": """
+    "lucide:sun": """
         <path d="M12 3v2.2"/>
         <path d="M12 18.8V21"/>
         <path d="m4.9 4.9 1.6 1.6"/>
@@ -19,6 +19,9 @@ _STROKE_ICON_BODIES: dict[str, str] = {
         <path d="m4.9 19.1 1.6-1.6"/>
         <path d="m17.5 6.5 1.6-1.6"/>
         <circle cx="12" cy="12" r="3.5"/>
+    """,
+    "lucide:moon": """
+        <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8Z"/>
     """,
     "lucide:upload-cloud": """
         <path d="M6 18a4 4 0 1 1 .6-7.96A6 6 0 0 1 18 9a4 4 0 1 1 0 8H6Z"/>

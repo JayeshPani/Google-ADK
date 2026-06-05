@@ -8,10 +8,12 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 import sys
+import threading
+import time
 import uuid
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -84,6 +86,57 @@ class ViewerContext:
     email: str | None
     guest_user_id: str | None
     should_set_guest_cookie: bool
+
+
+@dataclass(slots=True)
+class DiagnosisJob:
+    job_id: str
+    user_id: str
+    status: str = "queued"
+    packet_id: str = ""
+    current_step: str = "Queued"
+    progress_percent: int = 0
+    error: str = ""
+    timings: dict[str, float] | None = None
+    redirect_url: str = ""
+    created_at: float = 0.0
+    updated_at: float = 0.0
+
+
+class DiagnosisJobRegistry:
+    def __init__(self) -> None:
+        self._jobs: dict[str, DiagnosisJob] = {}
+        self._lock = threading.Lock()
+
+    def create(self, user_id: str) -> DiagnosisJob:
+        now = time.time()
+        job = DiagnosisJob(
+            job_id=str(uuid.uuid4()),
+            user_id=user_id,
+            created_at=now,
+            updated_at=now,
+            timings={},
+        )
+        with self._lock:
+            self._jobs[job.job_id] = job
+        return job
+
+    def update(self, job_id: str, **changes: Any) -> DiagnosisJob | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            for key, value in changes.items():
+                setattr(job, key, value)
+            job.updated_at = time.time()
+            return job
+
+    def progress(self, job_id: str, step: str, percent: int) -> None:
+        self.update(job_id, current_step=step, progress_percent=percent)
+
+    def get(self, job_id: str) -> DiagnosisJob | None:
+        with self._lock:
+            return self._jobs.get(job_id)
 
 
 def _static_path(path: str) -> str:
@@ -373,6 +426,7 @@ def _diagnose_context(
     runtime: AgentRuntime,
     *,
     packet: SavedJobPacket | None,
+    job_id: str = "",
     demo_case: str = "",
     jd_text: str = "",
     rejection_notes: str = "",
@@ -393,6 +447,8 @@ def _diagnose_context(
         "top_skill_chips": packet.report.missing_skills[:4] if packet else [],
         "preview_edits": packet.report.exact_edits[:2] if packet else [],
         "preview_plan": packet.report.action_plan[:3] if packet else [],
+        "full_report_ready": bool(packet and packet.report.rewritten_resume and packet.report.exact_edits),
+        "diagnosis_job_id": job_id,
         "eval_scores": getattr(packet, "eval_scores", None) if packet else None,
         "demo_case_key": demo_case,
         "demo_jd": demo_jd,
@@ -460,15 +516,30 @@ def _interview_session_lookup(packet: SavedJobPacket, session_id: str = "") -> I
     return packet.interview_sessions[-1] if packet.interview_sessions else None
 
 
-def _sorted_comparison_rows(comparison: MultiJDComparison, sort_key: str = "overall") -> list[dict[str, Any]]:
+def _sorted_comparison_rows(comparison: MultiJDComparison, sort_key: str = "priority") -> list[dict[str, Any]]:
     key_map = {
         "overall": "score_overall",
         "ats": "score_ats",
         "evidence": "score_evidence",
         "level_fit": "score_level_fit",
+        "coverage": "hard_skill_coverage",
     }
-    attribute = key_map.get(sort_key, "score_overall")
-    rows = sorted(comparison.rows, key=lambda item: getattr(item, attribute), reverse=True)
+    decision_priority = {"apply_now": 4, "apply_after_patch": 3, "defer": 2, "not_fit": 1}
+    if sort_key == "priority":
+        rows = sorted(
+            comparison.rows,
+            key=lambda item: (
+                decision_priority.get(item.recommended_decision, 0),
+                item.score_overall,
+                item.hard_skill_coverage,
+                item.score_evidence,
+                item.score_level_fit,
+            ),
+            reverse=True,
+        )
+    else:
+        attribute = key_map.get(sort_key, "score_overall")
+        rows = sorted(comparison.rows, key=lambda item: getattr(item, attribute), reverse=True)
     return [
         {
             "packet_id": row.packet_id,
@@ -480,6 +551,17 @@ def _sorted_comparison_rows(comparison: MultiJDComparison, sort_key: str = "over
             "score_level_fit": row.score_level_fit,
             "recommended_decision": row.recommended_decision,
             "top_gap_title": row.top_gap_title,
+            "rank": row.rank,
+            "rank_reason": row.rank_reason,
+            "strengths": row.strengths,
+            "risks": row.risks,
+            "next_action": row.next_action,
+            "matched_skills": row.matched_skills,
+            "missing_hard_skills": row.missing_hard_skills,
+            "under_evidenced_skills": row.under_evidenced_skills,
+            "hard_skill_coverage": row.hard_skill_coverage,
+            "scoring_source": row.scoring_source,
+            "score_rationale": row.score_rationale,
             "decision_meta": _decision_meta(row.recommended_decision),
         }
         for row in rows
@@ -496,6 +578,7 @@ def create_app(
     runtime = runtime or AgentRuntime(settings=settings)
     optimizer = optimizer or PromptOptimizer(settings=settings)
     auth_service = AuthService(settings=settings, tracker=runtime.service.tracker)
+    job_registry = DiagnosisJobRegistry()
     app = FastAPI(title="Refine")
     app.mount("/static", StaticFiles(directory=str(STATIC_ROOT)), name="static")
     TEMPLATES.env.globals["static_path"] = _static_path
@@ -503,6 +586,7 @@ def create_app(
     app.state.runtime = runtime
     app.state.optimizer = optimizer
     app.state.auth_service = auth_service
+    app.state.diagnosis_jobs = job_registry
 
     @app.get("/auth/google/start")
     async def google_oauth_start(
@@ -721,6 +805,7 @@ def create_app(
         request: Request,
         packet_id: str = "",
         demo_case: str = "",
+        job_id: str = "",
     ) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
@@ -728,9 +813,190 @@ def create_app(
             request,
             "diagnose.html",
             viewer=viewer,
-            context=_diagnose_context(runtime, packet=packet, demo_case=demo_case),
+            context=_diagnose_context(runtime, packet=packet, demo_case=demo_case, job_id=job_id),
         )
 
+    @app.post("/resume/preview-parse")
+    async def resume_preview_parse(resume: UploadFile = File(...)):
+        if not resume.filename:
+            return JSONResponse({"error": "Choose a resume file first."}, status_code=400)
+        try:
+            preview = runtime.service.preview_cached_resume(
+                file_name=resume.filename,
+                content=await resume.read(),
+                max_chars=RESUME_PREVIEW_MAX_CHARS,
+            )
+        except Exception as exc:
+            return JSONResponse({"error": f"Resume preview failed: {exc}"}, status_code=400)
+        return JSONResponse(preview)
+
+    def _run_diagnosis_job(
+        *,
+        job_id: str,
+        user_id: str,
+        resume_path: Path,
+        resume_cache_key: str,
+        resume_name: str,
+        jd_text: str,
+        rejection_notes: str,
+        temp_path: Path | None = None,
+    ) -> None:
+        try:
+            job_registry.update(job_id, status="queued", current_step="Queued", progress_percent=2)
+            quick = runtime.service.diagnose_quick(
+                resume_path=resume_path,
+                resume_cache_key=resume_cache_key,
+                resume_name=resume_name or None,
+                jd_text=jd_text,
+                rejection_notes=rejection_notes,
+                user_id=user_id,
+                session_id=str(uuid.uuid4()),
+                persist=True,
+                progress_callback=lambda step, percent: job_registry.progress(job_id, step, percent),
+            )
+            packet = quick.packet
+            redirect_url = f"/?packet_id={packet.packet_id}&job_id={job_id}"
+            job_registry.update(
+                job_id,
+                status="quick_ready",
+                packet_id=packet.packet_id,
+                current_step="Quick score ready",
+                progress_percent=74,
+                redirect_url=redirect_url,
+                timings=quick.timings,
+            )
+            full = runtime.service.complete_diagnosis(
+                packet_id=packet.packet_id,
+                user_id=user_id,
+                progress_callback=lambda step, percent: job_registry.progress(job_id, step, percent),
+            )
+            timings = dict(quick.timings)
+            if full is not None:
+                timings.update(full.timings)
+            job_registry.update(
+                job_id,
+                status="completed",
+                current_step="Full report complete",
+                progress_percent=100,
+                timings=timings,
+            )
+            optimizer.record_successful_diagnosis(packet_id=packet.packet_id, session_id=packet.session_id)
+        except Exception as exc:
+            job_registry.update(
+                job_id,
+                status="failed",
+                current_step="Diagnosis failed",
+                progress_percent=100,
+                error=str(exc),
+            )
+        finally:
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink(missing_ok=True)
+
+    def _run_packet_completion_job(*, job_id: str, user_id: str, packet_id: str) -> None:
+        try:
+            job_registry.update(
+                job_id,
+                status="queued",
+                packet_id=packet_id,
+                current_step="Full report finishing",
+                progress_percent=74,
+                redirect_url=f"/?packet_id={packet_id}&job_id={job_id}",
+            )
+            result = runtime.service.complete_diagnosis(
+                packet_id=packet_id,
+                user_id=user_id,
+                progress_callback=lambda step, percent: job_registry.progress(job_id, step, percent),
+            )
+            if result is None:
+                raise RuntimeError("That diagnosis packet could not be completed.")
+            job_registry.update(
+                job_id,
+                status="completed",
+                current_step="Full report complete",
+                progress_percent=100,
+                timings=result.timings,
+            )
+            optimizer.record_successful_diagnosis(packet_id=packet_id, session_id=result.packet.session_id)
+        except Exception as exc:
+            job_registry.update(
+                job_id,
+                status="failed",
+                current_step="Full report failed",
+                progress_percent=100,
+                error=str(exc),
+            )
+
+    @app.get("/diagnose/progress/{job_id}", response_class=HTMLResponse)
+    async def diagnose_progress_page(request: Request, job_id: str) -> HTMLResponse:
+        viewer = _user_identity(request, auth_service)
+        job = job_registry.get(job_id)
+        if job is None or job.user_id != viewer.user_id:
+            return _render(
+                request,
+                "diagnose_progress.html",
+                viewer=viewer,
+                context={
+                    "active_item": "diagnose",
+                    "job": None,
+                    "job_id": job_id,
+                    "error_message": "That diagnosis job is no longer available. Please run the diagnosis again.",
+                },
+            )
+        return _render(
+            request,
+            "diagnose_progress.html",
+            viewer=viewer,
+            context={
+                "active_item": "diagnose",
+                "job": job,
+                "job_id": job_id,
+                "error_message": "",
+            },
+        )
+
+    @app.get("/diagnose/jobs/{job_id}.json")
+    async def diagnose_job_status(request: Request, job_id: str):
+        viewer = _user_identity(request, auth_service)
+        job = job_registry.get(job_id)
+        if job is None or job.user_id != viewer.user_id:
+            return JSONResponse({"status": "missing", "error": "Diagnosis job not found."}, status_code=404)
+        return JSONResponse(
+            {
+                "job_id": job.job_id,
+                "status": job.status,
+                "packet_id": job.packet_id,
+                "current_step": job.current_step,
+                "progress_percent": job.progress_percent,
+                "error": job.error,
+                "timings": job.timings or {},
+                "redirect_url": job.redirect_url,
+            }
+        )
+
+    @app.post("/diagnose/packets/{packet_id}/complete")
+    async def complete_existing_packet(request: Request, packet_id: str):
+        viewer = _user_identity(request, auth_service)
+        packet = _get_user_packet(runtime, viewer.user_id, packet_id)
+        if packet is None:
+            return RedirectResponse(url="/", status_code=303)
+        if packet.report.rewritten_resume is not None and packet.report.exact_edits:
+            return RedirectResponse(url=f"/?packet_id={packet.packet_id}", status_code=303)
+        job = job_registry.create(viewer.user_id)
+        background_tasks = BackgroundTasks()
+        background_tasks.add_task(
+            _run_packet_completion_job,
+            job_id=job.job_id,
+            user_id=viewer.user_id,
+            packet_id=packet.packet_id,
+        )
+        response = RedirectResponse(url=f"/diagnose/progress/{job.job_id}", status_code=303)
+        response.background = background_tasks
+        if viewer.should_set_guest_cookie:
+            _set_guest_cookie(response, viewer.user_id)
+        return response
+
+    @app.post("/diagnose/jobs")
     @app.post("/diagnose")
     async def run_diagnosis(
         request: Request,
@@ -738,6 +1004,7 @@ def create_app(
         jd_text: str = Form(""),
         rejection_notes: str = Form(""),
         demo_case: str = Form(""),
+        resume_cache_key: str = Form(""),
         resume: UploadFile | None = File(default=None),
     ):
         viewer = _user_identity(request, auth_service)
@@ -750,11 +1017,21 @@ def create_app(
         try:
             if resume is not None and resume.filename:
                 suffix = Path(resume.filename).suffix or ".txt"
+                content = await resume.read()
+                try:
+                    cache_preview = runtime.service.preview_cached_resume(
+                        file_name=resume.filename,
+                        content=content,
+                        max_chars=RESUME_PREVIEW_MAX_CHARS,
+                    )
+                    resume_cache_key = resume_cache_key or str(cache_preview.get("resume_cache_key", ""))
+                    resume_preview = cache_preview
+                except Exception:
+                    resume_preview = None
                 with NamedTemporaryFile(delete=False, suffix=suffix) as handle:
-                    handle.write(await resume.read())
+                    handle.write(content)
                     temp_path = Path(handle.name)
                 resume_path = temp_path
-                resume_preview = _build_resume_preview(resume_path, display_name=resume_hint)
             elif effective_demo_case:
                 try:
                     resume_path, demo_jd = _load_demo_case(effective_demo_case)
@@ -809,43 +1086,39 @@ def create_app(
                     ),
                 )
 
-            try:
-                result = await runtime.run_diagnostic_async(
-                    resume_path=str(resume_path),
-                    jd_text=effective_jd,
-                    rejection_notes=rejection_notes,
-                    user_id=viewer.user_id,
-                )
-                if resume_hint and result.get("packet") is not None:
-                    result["packet"].resume_name = resume_hint
-                    runtime.service.tracker.save(result["packet"])
-            except Exception as exc:
-                return _render(
-                    request,
-                    "diagnose.html",
-                    viewer=viewer,
-                    context=_diagnose_context(
-                        runtime,
-                        packet=None,
-                        demo_case=effective_demo_case,
-                        jd_text=effective_jd,
-                        rejection_notes=rejection_notes,
-                        error_message=f"Diagnosis failed: {exc}",
-                        resume_hint=resume_hint,
-                        resume_preview=resume_preview,
-                    ),
-                )
-        finally:
+            job = job_registry.create(viewer.user_id)
+            background_tasks.add_task(
+                _run_diagnosis_job,
+                job_id=job.job_id,
+                user_id=viewer.user_id,
+                resume_path=resume_path,
+                resume_cache_key=resume_cache_key,
+                resume_name=resume_hint or Path(resume_path).name,
+                jd_text=effective_jd,
+                rejection_notes=rejection_notes,
+                temp_path=temp_path,
+            )
+            temp_path = None
+        except Exception as exc:
             if temp_path is not None and temp_path.exists():
                 temp_path.unlink(missing_ok=True)
+            return _render(
+                request,
+                "diagnose.html",
+                viewer=viewer,
+                context=_diagnose_context(
+                    runtime,
+                    packet=None,
+                    demo_case=effective_demo_case,
+                    jd_text=effective_jd,
+                    rejection_notes=rejection_notes,
+                    error_message=f"Diagnosis failed: {exc}",
+                    resume_hint=resume_hint,
+                    resume_preview=resume_preview,
+                ),
+            )
 
-        background_tasks.add_task(
-            optimizer.record_successful_diagnosis,
-            packet_id=str(result.get("packet_id", "")),
-            session_id=str(result.get("session_id", "")),
-        )
-        response = RedirectResponse(url=f"/?packet_id={result['packet_id']}", status_code=303)
-        response.background = background_tasks
+        response = RedirectResponse(url=f"/diagnose/progress/{job.job_id}", status_code=303)
         if viewer.should_set_guest_cookie:
             _set_guest_cookie(response, viewer.user_id)
         return response
@@ -1059,6 +1332,7 @@ def create_app(
         jd_3: str = Form(""),
         jd_4: str = Form(""),
         jd_5: str = Form(""),
+        resume_cache_key: str = Form(""),
         resume: UploadFile | None = File(default=None),
     ):
         viewer = _user_identity(request, auth_service)
@@ -1089,22 +1363,45 @@ def create_app(
         temp_path: Path | None = None
         try:
             suffix = Path(resume.filename).suffix or ".txt"
+            content = await resume.read()
+            preview = runtime.service.preview_cached_resume(
+                file_name=resume.filename,
+                content=content,
+                max_chars=RESUME_PREVIEW_MAX_CHARS,
+            )
+            resume_cache_key = str(preview.get("resume_cache_key") or resume_cache_key)
             with NamedTemporaryFile(delete=False, suffix=suffix) as handle:
-                handle.write(await resume.read())
+                handle.write(content)
                 temp_path = Path(handle.name)
             comparison = runtime.service.compare_job_descriptions(
                 resume_path=str(temp_path),
                 jd_texts=non_empty,
                 rejection_notes=rejection_notes,
                 user_id=viewer.user_id,
+                resume_cache_key=resume_cache_key,
+                resume_name=resume.filename,
+            )
+        except Exception as exc:
+            return _render(
+                request,
+                "compare.html",
+                viewer=viewer,
+                context={
+                    "active_item": "compare",
+                    "error_message": f"Comparison failed: {exc}",
+                    "form_state": {"rejection_notes": rejection_notes, "jd_texts": jd_texts},
+                },
             )
         finally:
             if temp_path is not None and temp_path.exists():
                 temp_path.unlink(missing_ok=True)
-        return RedirectResponse(url=f"/compare/{comparison.comparison_id}", status_code=303)
+        response = RedirectResponse(url=f"/compare/{comparison.comparison_id}", status_code=303)
+        if viewer.should_set_guest_cookie:
+            _set_guest_cookie(response, viewer.user_id)
+        return response
 
     @app.get("/compare/{comparison_id}", response_class=HTMLResponse)
-    async def comparison_results_page(request: Request, comparison_id: str, sort: str = "overall") -> HTMLResponse:
+    async def comparison_results_page(request: Request, comparison_id: str, sort: str = "priority") -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
         comparison = runtime.service.tracker.get_comparison(comparison_id)
         if comparison is None or comparison.user_id != viewer.user_id:
@@ -1163,27 +1460,9 @@ def create_app(
             },
         )
 
-    @app.get("/settings", response_class=HTMLResponse)
-    async def settings_page(request: Request) -> HTMLResponse:
-        viewer = _user_identity(request, auth_service)
-        improvement_snapshot = optimizer.latest_snapshot()
-        return _render(
-            request,
-            "settings.html",
-            viewer=viewer,
-            context={
-                "active_item": "settings",
-                "improvement_run": improvement_snapshot["improvement_run"],
-                "candidate_prompt": improvement_snapshot["candidate_prompt"],
-                "improvement_status": improvement_snapshot,
-                "runtime_status": {
-                    "adk_enabled": runtime.adk_available(),
-                    "model_chain": runtime.settings.generation_model_candidates,
-                    "phoenix_project": runtime.settings.phoenix_project_name,
-                    "collector": runtime.settings.phoenix_collector_endpoint,
-                },
-            },
-        )
+    @app.get("/settings")
+    async def settings_page() -> RedirectResponse:
+        return RedirectResponse("/", status_code=303)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

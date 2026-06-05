@@ -291,13 +291,45 @@ class MultiJDRow:
     score_level_fit: float
     recommended_decision: Literal["apply_now", "apply_after_patch", "defer", "not_fit"]
     top_gap_title: str
+    rank: int = 0
+    rank_reason: str = ""
+    strengths: list[str] = field(default_factory=list)
+    risks: list[str] = field(default_factory=list)
+    next_action: str = ""
+    matched_skills: list[str] = field(default_factory=list)
+    missing_hard_skills: list[str] = field(default_factory=list)
+    under_evidenced_skills: list[str] = field(default_factory=list)
+    hard_skill_coverage: float = 0.0
+    scoring_source: str = "deterministic"
+    score_rationale: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return _serialize(self)
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "MultiJDRow":
-        return cls(**payload)
+        return cls(
+            packet_id=payload["packet_id"],
+            role_title=payload["role_title"],
+            company_name=payload["company_name"],
+            score_overall=payload["score_overall"],
+            score_ats=payload["score_ats"],
+            score_evidence=payload["score_evidence"],
+            score_level_fit=payload["score_level_fit"],
+            recommended_decision=payload["recommended_decision"],
+            top_gap_title=payload["top_gap_title"],
+            rank=payload.get("rank", 0),
+            rank_reason=payload.get("rank_reason", ""),
+            strengths=payload.get("strengths", []),
+            risks=payload.get("risks", []),
+            next_action=payload.get("next_action", ""),
+            matched_skills=payload.get("matched_skills", []),
+            missing_hard_skills=payload.get("missing_hard_skills", []),
+            under_evidenced_skills=payload.get("under_evidenced_skills", []),
+            hard_skill_coverage=payload.get("hard_skill_coverage", 0.0),
+            scoring_source=payload.get("scoring_source", "deterministic"),
+            score_rationale=payload.get("score_rationale", {}),
+        )
 
 
 @dataclass(slots=True)
@@ -306,6 +338,10 @@ class MultiJDComparison:
     user_id: str
     resume_name: str
     rows: list[MultiJDRow]
+    best_packet_id: str = ""
+    summary: str = ""
+    common_missing_skills: list[str] = field(default_factory=list)
+    shared_resume_strategy: str = ""
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)
 
@@ -319,6 +355,10 @@ class MultiJDComparison:
             user_id=payload["user_id"],
             resume_name=payload["resume_name"],
             rows=[MultiJDRow.from_dict(item) for item in payload.get("rows", [])],
+            best_packet_id=payload.get("best_packet_id", ""),
+            summary=payload.get("summary", ""),
+            common_missing_skills=payload.get("common_missing_skills", []),
+            shared_resume_strategy=payload.get("shared_resume_strategy", ""),
             created_at=payload.get("created_at", utc_now_iso()),
             updated_at=payload.get("updated_at", utc_now_iso()),
         )

@@ -18,7 +18,6 @@ if str(SRC) not in sys.path:
 from app.web_app import COOKIE_NAME, GOOGLE_STATE_COOKIE_NAME, SESSION_COOKIE_NAME, create_app
 from job_rejection_agent.agents.root_agent import AgentRuntime
 from job_rejection_agent.config import Settings
-from job_rejection_agent.domain import ImprovementRun
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures"
@@ -90,6 +89,11 @@ class WebAppTests(unittest.TestCase):
         self.assertNotIn("code.iconify.design", response.text)
         self.assertNotIn("api.fontshare.com", response.text)
         self.assertNotIn("unpkg.com/mammoth", response.text)
+        self.assertIn("data-theme-toggle", response.text)
+        self.assertIn("refine_theme", response.text)
+        self.assertIn("theme-icon-sun", response.text)
+        self.assertIn("theme-icon-moon", response.text)
+        self.assertNotIn('href="/settings"', response.text)
 
     def test_static_css_route_serves_local_bundle(self) -> None:
         response = self.client.get("/static/css/app.css")
@@ -104,6 +108,15 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("Save every diagnosis to your account.", response.text)
         self.assertIn("Sign In", response.text)
         self.assertIn("Continue with Google", response.text)
+
+    def test_compare_page_includes_resume_preview_controls(self) -> None:
+        response = self.client.get("/compare")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("compare-resume-cache-key", response.text)
+        self.assertIn("compare-resume-preview-shell", response.text)
+        self.assertIn("/resume/preview-parse", response.text)
+        self.assertIn("Resume Preview", response.text)
 
     def test_google_oauth_start_sets_state_cookie_and_redirects(self) -> None:
         response = self.client.get("/auth/google/start?next_path=/history", follow_redirects=False)
@@ -132,32 +145,55 @@ class WebAppTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 303)
-        self.assertIn("/?packet_id=", response.headers["location"])
+        self.assertIn("/diagnose/progress/", response.headers["location"])
 
-        result_page = self.client.get(response.headers["location"])
+        job_id = response.headers["location"].rstrip("/").split("/")[-1]
+        status = self.client.get(f"/diagnose/jobs/{job_id}.json")
+        self.assertEqual(status.status_code, 200)
+        payload = status.json()
+        self.assertIn(payload["status"], {"quick_ready", "completed"})
+        self.assertTrue(payload["packet_id"])
+
+        progress_page = self.client.get(response.headers["location"])
+        self.assertEqual(progress_page.status_code, 200)
+        self.assertIn("Diagnosis in progress", progress_page.text)
+
+        result_page = self.client.get(f"/?packet_id={payload['packet_id']}&job_id={job_id}")
         self.assertEqual(result_page.status_code, 200)
         self.assertIn("Analysis Complete", result_page.text)
         self.assertIn("arjun_backend_student.txt", result_page.text)
         self.optimizer.record_successful_diagnosis.assert_called_once()
 
-    def test_diagnose_failure_keeps_resume_preview_visible(self) -> None:
+    def test_resume_preview_parse_returns_cache_key(self) -> None:
+        response = self.client.post(
+            "/resume/preview-parse",
+            files={"resume": ("arjun_backend_student.txt", self._resume_fixture().read_bytes(), "text/plain")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["resume_cache_key"])
+        self.assertIn("Computer engineering student", payload["text"])
+
+    def test_diagnose_failure_surfaces_on_progress_endpoint(self) -> None:
         with mock.patch.object(
-            self.runtime,
-            "run_diagnostic_async",
-            new=mock.AsyncMock(side_effect=RuntimeError("503 UNAVAILABLE. Model under high demand.")),
+            self.runtime.service,
+            "diagnose_quick",
+            side_effect=RuntimeError("503 UNAVAILABLE. Model under high demand."),
         ):
             response = self.client.post(
                 "/diagnose",
                 data={"jd_text": self._jd_fixture_text(), "rejection_notes": "Need stronger API ownership evidence."},
                 files={"resume": ("arjun_backend_student.txt", self._resume_fixture().read_bytes(), "text/plain")},
+                follow_redirects=False,
             )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("The diagnosis did not run.", response.text)
-        self.assertIn("503 UNAVAILABLE", response.text)
-        self.assertIn("Resume Preview", response.text)
-        self.assertIn("arjun_backend_student.txt", response.text)
-        self.assertIn("Computer engineering student", response.text)
+        self.assertEqual(response.status_code, 303)
+        job_id = response.headers["location"].rstrip("/").split("/")[-1]
+        status = self.client.get(f"/diagnose/jobs/{job_id}.json")
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json()["status"], "failed")
+        self.assertIn("503 UNAVAILABLE", status.json()["error"])
 
     def test_patch_route_rejects_foreign_packet(self) -> None:
         packet = self.runtime.service.diagnose(
@@ -266,7 +302,81 @@ class WebAppTests(unittest.TestCase):
         page = self.client.get(response.headers["location"])
         self.assertEqual(page.status_code, 200)
         self.assertIn("Multi-JD Comparison", page.text)
+        self.assertIn("Apply Priority", page.text)
+        self.assertIn("Shared Resume Strategy", page.text)
+        self.assertIn("Best First Application", page.text)
+        self.assertIn("What makes this viable", page.text)
+        self.assertIn("What can block it", page.text)
         self.assertIn("Open Analysis", page.text)
+        self.assertIn("Finish Full Report", page.text)
+        self.assertNotIn("Rewritten Resume", page.text)
+
+    def test_compare_direct_post_sets_guest_cookie_for_redirect_result(self) -> None:
+        direct_client = TestClient(self.app)
+        response = direct_client.post(
+            "/compare",
+            data={
+                "jd_1": self._jd_fixture_text(),
+                "jd_2": (FIXTURE_ROOT / "jds" / "ai_products_intern.md").read_text(encoding="utf-8"),
+            },
+            files={"resume": ("arjun_backend_student.txt", self._resume_fixture().read_bytes(), "text/plain")},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertIn(COOKIE_NAME, response.headers.get("set-cookie", ""))
+        page = direct_client.get(response.headers["location"])
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Apply Priority", page.text)
+
+    def test_compare_validation_requires_resume_and_two_jds(self) -> None:
+        no_resume = self.client.post(
+            "/compare",
+            data={"jd_1": self._jd_fixture_text(), "jd_2": self._jd_fixture_text()},
+        )
+        self.assertEqual(no_resume.status_code, 200)
+        self.assertIn("Upload one resume", no_resume.text)
+
+        one_jd = self.client.post(
+            "/compare",
+            data={"jd_1": self._jd_fixture_text(), "jd_2": ""},
+            files={"resume": ("arjun_backend_student.txt", self._resume_fixture().read_bytes(), "text/plain")},
+        )
+        self.assertEqual(one_jd.status_code, 200)
+        self.assertIn("Paste at least two job descriptions", one_jd.text)
+
+    def test_compare_can_use_preview_cache_and_finish_full_report(self) -> None:
+        preview = self.client.post(
+            "/resume/preview-parse",
+            files={"resume": ("arjun_backend_student.txt", self._resume_fixture().read_bytes(), "text/plain")},
+        )
+        self.assertEqual(preview.status_code, 200)
+        resume_cache_key = preview.json()["resume_cache_key"]
+
+        response = self.client.post(
+            "/compare",
+            data={
+                "resume_cache_key": resume_cache_key,
+                "jd_1": self._jd_fixture_text(),
+                "jd_2": (FIXTURE_ROOT / "jds" / "ai_products_intern.md").read_text(encoding="utf-8"),
+            },
+            files={"resume": ("arjun_backend_student.txt", self._resume_fixture().read_bytes(), "text/plain")},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        comparison_id = response.headers["location"].rstrip("/").split("/")[-1]
+        comparison = self.runtime.service.tracker.get_comparison(comparison_id)
+        self.assertIsNotNone(comparison)
+        packet_id = comparison.rows[0].packet_id
+        packet = self.runtime.service.tracker.get(packet_id)
+        self.assertIsNotNone(packet)
+        self.assertIsNone(packet.report.rewritten_resume)
+
+        completion = self.client.post(f"/diagnose/packets/{packet_id}/complete", follow_redirects=False)
+        self.assertEqual(completion.status_code, 303)
+        self.assertIn("/diagnose/progress/", completion.headers["location"])
+        completed_packet = self.runtime.service.tracker.get(packet_id)
+        self.assertIsNotNone(completed_packet.report.rewritten_resume)
 
     def test_signup_migrates_guest_history_and_sets_session_cookie(self) -> None:
         packet = self.runtime.service.diagnose(
@@ -319,39 +429,11 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(callback.headers["location"], "/history")
         self.assertIn(SESSION_COOKIE_NAME, callback.headers.get("set-cookie", ""))
 
-    def test_settings_page_describes_automatic_improvement_without_manual_button(self) -> None:
-        self.optimizer.latest_snapshot.return_value = {
-            "status": "idle",
-            "auto_enabled": True,
-            "auto_interval": 5,
-            "successful_diagnosis_count": 7,
-            "last_auto_run_diagnosis_count": 5,
-            "diagnoses_since_last_run": 2,
-            "diagnoses_until_next_run": 3,
-            "last_started_at": "",
-            "last_completed_at": "2026-05-27T09:30:00+00:00",
-            "last_error": "",
-            "last_trigger_packet_id": "packet-1",
-            "last_trigger_session_id": "session-1",
-            "candidate_prompt": "Prompt preview",
-            "improvement_run": ImprovementRun(
-                run_id="run-1",
-                baseline_prompt_version="baseline-v1",
-                candidate_prompt_version="baseline-v1-candidate",
-                source_span_ids=["span-1"],
-                baseline_scores={"composite_score": 0.7},
-                candidate_scores={"composite_score": 0.76},
-                promoted=True,
-                analysis="Candidate improved the held-out suite without regressions.",
-            ),
-        }
+    def test_settings_page_redirects_to_home(self) -> None:
+        response = self.client.get("/settings", follow_redirects=False)
 
-        response = self.client.get("/settings")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Every 5 successful diagnoses", response.text)
-        self.assertIn("Next Auto Run", response.text)
-        self.assertNotIn("Run Improvement Loop", response.text)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/")
 
 
 if __name__ == "__main__":
