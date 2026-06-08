@@ -1,4 +1,4 @@
-"""Rendering helpers for Streamlit and scripts."""
+"""Rendering helpers for saved packets and scripts."""
 
 from __future__ import annotations
 

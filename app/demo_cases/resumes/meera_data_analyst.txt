@@ -1,0 +1,24 @@
+Meera Iyer
+meera.iyer@gmail.com | linkedin.com/in/meera-iyer | github.com/meera-data
+
+SUMMARY
+New-grad analyst candidate with strong SQL, dashboarding, and experimentation storytelling.
+
+EDUCATION
+BSc Statistics, St. Xavier's College Mumbai
+
+SKILLS
+SQL, Python, Tableau, Power BI, Data Analysis, pandas
+
+PROJECTS
+Retention Dashboard Revamp
+- Built a Tableau dashboard for cohort retention analysis across 18 monthly cohorts.
+- Identified a checkout drop that informed an onboarding experiment.
+
+Pricing Experiment Review
+- Cleaned experiment data in SQL and Python and produced a decision memo for stakeholders.
+
+EXPERIENCE
+Analytics Intern, LoopCart
+- Wrote SQL for weekly business reviews and published recurring KPI tables.
+

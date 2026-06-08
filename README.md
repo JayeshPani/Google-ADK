@@ -2,7 +2,7 @@
 
 An evidence-first rejection diagnosis copilot for students and new grads. The app analyzes a resume, a target job description, and optional rejection notes to explain why a candidate is getting rejected, what evidence is missing, how to patch the resume, and what to do this week to improve the next application.
 
-Built with `Google ADK`, `Gemini`, `Arize Phoenix`, `Phoenix MCP`, `Firestore`, and `Streamlit`.
+Built with `Google ADK`, `Gemini`, `Arize Phoenix`, `Phoenix MCP`, `Firestore`, and a FastAPI/Jinja web app.
 
 ## Core workflow
 
@@ -15,7 +15,9 @@ Built with `Google ADK`, `Gemini`, `Arize Phoenix`, `Phoenix MCP`, `Firestore`, 
 ## Project layout
 
 ```text
-app/streamlit_app.py
+app/web_app.py
+app/templates/
+app/static/
 src/job_rejection_agent/
 tests/
 infra/
@@ -29,7 +31,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-streamlit run app/streamlit_app.py
+python -m uvicorn app.web_app:app --reload --host 127.0.0.1 --port 8501
 ```
 
 ## Environment variables
@@ -52,7 +54,7 @@ Or build manually from the included Dockerfile:
 ```bash
 gcloud run deploy job-rejection-agent \
   --source . \
-  --region us-central1 \
+  --region asia-south1 \
   --allow-unauthenticated
 ```
 
@@ -67,4 +69,3 @@ gcloud run deploy job-rejection-agent \
 
 - `python3 -m unittest discover -s tests`
 - `python3 scripts/smoke_test.py`
-

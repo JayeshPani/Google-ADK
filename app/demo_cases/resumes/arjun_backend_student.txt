@@ -1,0 +1,25 @@
+Arjun Shah
+arjun.shah@outlook.com | linkedin.com/in/arjun-shah-dev | github.com/arjun-shah
+
+SUMMARY
+Computer engineering student who enjoys backend systems, API design, and platform tooling.
+
+EDUCATION
+BE in Computer Engineering, Pune Institute of Computer Technology
+
+SKILLS
+Python, Java, PostgreSQL, REST API, Docker, Linux, Git
+
+PROJECTS
+Expense Split Service
+- Designed REST APIs in Python for group expense management with PostgreSQL persistence.
+- Added role-based endpoints and integration tests for payment workflows.
+
+Course Registration Engine
+- Built a Java scheduling tool that resolves timetable conflicts for university registration.
+
+EXPERIENCE
+Backend Intern, LocalStack Labs
+- Implemented internal tooling for deployment checks and log parsing.
+- Contributed to small automation scripts used during release readiness.
+

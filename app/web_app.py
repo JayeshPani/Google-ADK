@@ -50,8 +50,9 @@ SESSION_COOKIE_NAME = "refine_session"
 GOOGLE_STATE_COOKIE_NAME = "refine_google_oauth_state"
 COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
-RESUME_FIXTURES = ROOT / "tests" / "fixtures" / "resumes"
-JD_FIXTURES = ROOT / "tests" / "fixtures" / "jds"
+DEMO_CASE_ROOT = ROOT / "app" / "demo_cases"
+DEMO_RESUMES = DEMO_CASE_ROOT / "resumes"
+DEMO_JDS = DEMO_CASE_ROOT / "jds"
 DEMO_CASES = {
     "ml-platform-fit": {
         "label": "ML Platform Fit",
@@ -295,8 +296,10 @@ def _load_demo_case(demo_case_key: str) -> tuple[Path, str]:
     demo = _resolve_demo_case(demo_case_key)
     if demo is None:
         raise ValueError("Unknown demo case.")
-    resume_path = RESUME_FIXTURES / demo["resume"]
-    jd_path = JD_FIXTURES / demo["jd"]
+    resume_path = DEMO_RESUMES / demo["resume"]
+    jd_path = DEMO_JDS / demo["jd"]
+    if not resume_path.exists() or not jd_path.exists():
+        raise ValueError("Demo case files are missing.")
     return resume_path, jd_path.read_text(encoding="utf-8")
 
 

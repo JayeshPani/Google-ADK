@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from app.web_app import COOKIE_NAME, GOOGLE_STATE_COOKIE_NAME, SESSION_COOKIE_NAME, create_app
+from app.web_app import COOKIE_NAME, DEMO_CASES, GOOGLE_STATE_COOKIE_NAME, SESSION_COOKIE_NAME, create_app
 from job_rejection_agent.agents.root_agent import AgentRuntime
 from job_rejection_agent.config import Settings
 
@@ -207,6 +207,30 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("Analysis Complete", result_page.text)
         self.assertIn("arjun_backend_student.txt", result_page.text)
         self.optimizer.record_successful_diagnosis.assert_called_once()
+
+    def test_all_demo_cases_create_diagnosis_jobs(self) -> None:
+        for demo_key, demo in DEMO_CASES.items():
+            with self.subTest(demo_case=demo_key):
+                response = self.client.post(
+                    "/diagnose",
+                    data={"jd_text": "", "rejection_notes": "", "demo_case": demo_key},
+                    follow_redirects=False,
+                )
+
+                self.assertEqual(response.status_code, 303)
+                self.assertIn("/diagnose/progress/", response.headers["location"])
+
+                job_id = response.headers["location"].rstrip("/").split("/")[-1]
+                status = self.client.get(f"/diagnose/jobs/{job_id}.json")
+                self.assertEqual(status.status_code, 200)
+                payload = status.json()
+                self.assertIn(payload["status"], {"quick_ready", "completed"})
+                self.assertTrue(payload["packet_id"])
+
+                result_page = self.client.get(f"/diagnose?packet_id={payload['packet_id']}&job_id={job_id}")
+                self.assertEqual(result_page.status_code, 200)
+                self.assertIn("Analysis Complete", result_page.text)
+                self.assertIn(demo["resume"], result_page.text)
 
     def test_resume_preview_parse_returns_cache_key(self) -> None:
         response = self.client.post(
