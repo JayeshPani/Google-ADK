@@ -113,7 +113,7 @@
             </div>
             <div>
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Demo Case (Optional)</label>
-              <select name="demo_case" class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm">
+              <select name="demo_case" id="demo-case-select" class="w-full px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm">
                 <option value="">Use my own resume</option>
                 {% for key, demo in demo_cases.items() %}
                 <option value="{{ key }}" {% if form_state.demo_case == key %}selected{% endif %}>{{ demo.label }}</option>
@@ -125,7 +125,7 @@
           <div class="space-y-6">
             <div>
               <label class="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Job Description</label>
-              <textarea name="jd_text" placeholder="Paste the full job description or role requirements..." class="w-full h-[452px] px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm resize-none">{{ form_state.jd_text if form_state.jd_text else demo_jd }}</textarea>
+              <textarea name="jd_text" id="jd-textarea" placeholder="Paste the full job description or role requirements..." class="w-full h-[452px] px-4 py-3 rounded-xl border border-[#EBE9E4] bg-[#FDFCF9] focus:ring-1 focus:ring-[#986848] focus:border-[#986848] outline-none transition-all text-sm resize-none">{{ form_state.jd_text if form_state.jd_text else demo_jd }}</textarea>
             </div>
           </div>
         </div>
@@ -365,6 +365,9 @@
   const previewPdfBlock = document.getElementById("resume-preview-pdf-block");
   const previewPdfFrame = document.getElementById("resume-preview-pdf-frame");
   const previewEmpty = document.getElementById("resume-preview-empty");
+  const demoCaseSelect = document.getElementById("demo-case-select");
+  const jdTextarea = document.getElementById("jd-textarea");
+  const demoCasePayloads = {{ demo_case_payloads | tojson }};
   let currentPdfUrl = null;
 
   const truncatePreview = (text, maxChars = 2200) => {
@@ -389,6 +392,38 @@
     previewTextBlock.classList.remove("hidden");
     previewPdfBlock.classList.add("hidden");
     previewEmpty.classList.add("hidden");
+  };
+
+  const renderDemoPreview = (demoKey) => {
+    if (!demoCaseSelect || !demoKey || !demoCasePayloads[demoKey]) {
+      return;
+    }
+    const payload = demoCasePayloads[demoKey];
+    const preview = payload.resume_preview || {};
+    renderTextPreview(
+      preview.display_name || `${payload.label} sample resume`,
+      preview.file_type || "TXT",
+      preview.text || ""
+    );
+    if (previewLines && typeof preview.line_count === "number") {
+      previewLines.textContent = `${preview.line_count} lines shown`;
+    }
+    if (previewTruncated) {
+      previewTruncated.textContent = preview.is_truncated ? "Preview truncated for readability." : "";
+    }
+    if (resumeLoaded && resumeLabel) {
+      resumeLoaded.classList.remove("hidden");
+      resumeLabel.textContent = `${payload.label} sample resume loaded`;
+    }
+    if (resumeCacheKey) {
+      resumeCacheKey.value = "";
+    }
+    if (resumeInput) {
+      resumeInput.value = "";
+    }
+    if (jdTextarea) {
+      jdTextarea.value = payload.jd_text || "";
+    }
   };
 
   const renderPdfPreview = (file) => {
@@ -453,6 +488,18 @@
         }
       }
     });
+  }
+
+  if (demoCaseSelect) {
+    demoCaseSelect.addEventListener("change", () => {
+      const selectedDemo = demoCaseSelect.value;
+      if (selectedDemo) {
+        renderDemoPreview(selectedDemo);
+      }
+    });
+    if (demoCaseSelect.value) {
+      renderDemoPreview(demoCaseSelect.value);
+    }
   }
 
   if (form && overlay) {

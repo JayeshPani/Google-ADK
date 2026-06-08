@@ -455,6 +455,23 @@ def _build_resume_preview(resume_path: Path, *, display_name: str | None = None)
     }
 
 
+def _demo_case_payloads() -> dict[str, dict[str, Any]]:
+    payloads: dict[str, dict[str, Any]] = {}
+    for key, demo in DEMO_CASES.items():
+        try:
+            resume_path, jd_text = _load_demo_case(key)
+        except ValueError:
+            continue
+        preview = _build_resume_preview(resume_path, display_name=demo["resume"])
+        if preview:
+            payloads[key] = {
+                "label": demo["label"],
+                "jd_text": jd_text,
+                "resume_preview": preview,
+            }
+    return payloads
+
+
 def _diagnose_context(
     runtime: AgentRuntime,
     *,
@@ -485,6 +502,7 @@ def _diagnose_context(
         "eval_scores": getattr(packet, "eval_scores", None) if packet else None,
         "demo_case_key": demo_case,
         "demo_jd": demo_jd,
+        "demo_case_payloads": _demo_case_payloads(),
         "error_message": error_message,
         "resume_hint": resume_hint,
         "resume_preview": resume_preview,

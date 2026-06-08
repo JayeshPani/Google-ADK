@@ -122,6 +122,10 @@ class WebAppTests(unittest.TestCase):
         self.assertNotIn(">Account</a>", response.text)
         self.assertNotIn("Guest ", response.text)
         self.assertIn("test@example.com", response.text)
+        self.assertIn("demoCasePayloads", response.text)
+        self.assertIn("nisha_ml_newgrad.txt", response.text)
+        self.assertIn("Campus Mentor Bot", response.text)
+        self.assertIn("ML Platform Engineer Intern at Northstar AI", response.text)
 
     def test_static_css_route_serves_local_bundle(self) -> None:
         response = self.client.get("/static/css/app.css")
