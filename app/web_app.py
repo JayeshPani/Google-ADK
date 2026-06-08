@@ -140,6 +140,14 @@ class DiagnosisJobRegistry:
             return self._jobs.get(job_id)
 
 
+def _is_secure_request(request: Request) -> bool:
+    """Detect HTTPS even behind Cloud Run / reverse-proxy TLS termination."""
+    if request.url.scheme == "https":
+        return True
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    return forwarded_proto == "https"
+
+
 def _static_path(path: str) -> str:
     return f"/static/{path.lstrip('/')}"
 
@@ -215,7 +223,7 @@ def _set_session_cookie(
         max_age=COOKIE_MAX_AGE_SECONDS,
         samesite="lax",
         httponly=True,
-        secure=request.url.scheme == "https",
+        secure=_is_secure_request(request),
     )
 
 
@@ -234,7 +242,7 @@ def _set_google_state_cookie(
         max_age=600,
         samesite="lax",
         httponly=True,
-        secure=request.url.scheme == "https",
+        secure=_is_secure_request(request),
     )
 
 
@@ -266,7 +274,15 @@ def _require_authentication(request: Request, viewer: ViewerContext) -> Redirect
 
 
 def _google_redirect_uri(request: Request, settings: Settings) -> str:
-    return settings.google_oauth_redirect_uri or str(request.url_for("google_oauth_callback"))
+    if settings.google_oauth_redirect_uri:
+        return settings.google_oauth_redirect_uri
+    # Cloud Run terminates TLS at its LB, so request.url_for() produces http://.
+    # Correct the scheme using X-Forwarded-Proto so the redirect_uri matches
+    # what is registered in Google Cloud Console.
+    url = request.url_for("google_oauth_callback")
+    if _is_secure_request(request) and url.scheme == "http":
+        url = url.replace(scheme="https")
+    return str(url)
 
 
 def _resolve_demo_case(demo_case_key: str | None) -> dict[str, str] | None:
