@@ -28,8 +28,20 @@ class Settings:
     app_name: str = "job-rejection-agent"
     model_id: str = "gemini-2.5-flash"
     eval_model_id: str = "gemini-2.5-flash"
-    model_fallbacks: tuple[str, ...] = ("gemini-2.5-flash-lite",)
-    eval_model_fallbacks: tuple[str, ...] = ("gemini-2.5-flash-lite",)
+    model_fallbacks: tuple[str, ...] = (
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+    )
+    eval_model_fallbacks: tuple[str, ...] = (
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+    )
     google_api_key: str | None = None
     google_oauth_client_id: str | None = None
     google_oauth_client_secret: str | None = None
@@ -170,11 +182,23 @@ def get_settings() -> Settings:
         eval_model_id=os.getenv("EVAL_MODEL_ID", os.getenv("MODEL_ID", "gemini-2.5-flash")),
         model_fallbacks=_read_model_list(
             os.getenv("MODEL_FALLBACKS"),
-            default=("gemini-2.5-flash-lite",),
+            default=(
+                "gemini-2.5-flash-lite",
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-lite",
+                "gemini-1.5-flash",
+                "gemini-1.5-flash-8b",
+            ),
         ),
         eval_model_fallbacks=_read_model_list(
             os.getenv("EVAL_MODEL_FALLBACKS"),
-            default=("gemini-2.5-flash-lite",),
+            default=(
+                "gemini-2.5-flash-lite",
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-lite",
+                "gemini-1.5-flash",
+                "gemini-1.5-flash-8b",
+            ),
         ),
         google_api_key=google_api_key or None,
         google_oauth_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID") or None,

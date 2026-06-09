@@ -49,51 +49,104 @@
 {% if not error_message %}
 <script>
   const jobId = "{{ job_id }}";
+  // Known redirect and packet_id baked in at render time — used to recover if the
+  // Cloud Run instance that ran the job is gone by the time we poll.
+  const knownRedirectUrl = "{{ known_redirect_url | default('') }}";
+  const knownPacketId = "{{ packet_id | default('') }}";
+
   const bar = document.getElementById("progress-bar");
   const step = document.getElementById("progress-step");
   const percent = document.getElementById("progress-percent");
   const timings = document.getElementById("progress-timings");
   const errorBox = document.getElementById("progress-error");
 
+  let pollInterval = null;
+  let redirecting = false;
+
+  const doRedirect = (url) => {
+    if (redirecting) return;
+    redirecting = true;
+    if (pollInterval) clearInterval(pollInterval);
+    window.location.href = url;
+  };
+
+  // Keep the URL bar up to date with the packet_id so a manual refresh recovers.
+  const updateUrlBar = (pktId) => {
+    if (pktId && !window.location.search.includes(pktId)) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("packet_id", pktId);
+        window.history.replaceState({}, "", url.toString());
+      } catch (_) {}
+    }
+  };
+
+  if (knownPacketId) {
+    updateUrlBar(knownPacketId);
+  }
+
   const pollJob = async () => {
+    if (redirecting) return;
     try {
       const response = await fetch(`/diagnose/jobs/${jobId}.json`, { headers: { "Accept": "application/json" } });
+
+      // 404 means the job registry is gone (Cloud Run scale-to-zero / new instance).
+      // If we already know where to send the user, do it now.
+      if (response.status === 404) {
+        if (knownRedirectUrl) {
+          doRedirect(knownRedirectUrl);
+          return;
+        }
+        if (knownPacketId) {
+          doRedirect(`/diagnose?packet_id=${knownPacketId}`);
+          return;
+        }
+        // No recovery info — show a soft message, don't crash.
+        if (errorBox) {
+          errorBox.classList.remove("hidden");
+          errorBox.textContent = "The diagnosis is still running. Refresh in a few seconds to see your results.";
+        }
+        return;
+      }
+
       const payload = await response.json();
+
       if (!response.ok || payload.status === "missing") {
-        throw new Error(payload.error || "Diagnosis job was not found.");
+        if (knownRedirectUrl) { doRedirect(knownRedirectUrl); return; }
+        if (knownPacketId) { doRedirect(`/diagnose?packet_id=${knownPacketId}`); return; }
+        if (errorBox) {
+          errorBox.classList.remove("hidden");
+          errorBox.textContent = payload.error || "Diagnosis job was not found.";
+        }
+        return;
       }
-      if (bar) {
-        bar.style.width = `${payload.progress_percent || 0}%`;
-      }
-      if (step) {
-        step.textContent = payload.current_step || "Working";
-      }
-      if (percent) {
-        percent.textContent = `${payload.progress_percent || 0}%`;
-      }
-      if (timings) {
-        timings.textContent = JSON.stringify(payload.timings || {}, null, 2);
-      }
+
+      if (bar) bar.style.width = `${payload.progress_percent || 0}%`;
+      if (step) step.textContent = payload.current_step || "Working";
+      if (percent) percent.textContent = `${payload.progress_percent || 0}%`;
+      if (timings) timings.textContent = JSON.stringify(payload.timings || {}, null, 2);
+
+      // Keep URL bar fresh as soon as packet_id is known.
+      if (payload.packet_id) updateUrlBar(payload.packet_id);
+
       if ((payload.status === "quick_ready" || payload.status === "completed") && payload.redirect_url) {
-        window.location.href = payload.redirect_url;
+        doRedirect(payload.redirect_url);
         return;
       }
       if (payload.status === "failed") {
         const rawError = payload.error || "Diagnosis failed.";
         const friendlyError = encodeURIComponent(rawError);
-        window.location.href = `/diagnose?error=${friendlyError}`;
+        doRedirect(`/diagnose?error=${friendlyError}`);
         return;
       }
     } catch (error) {
-      if (errorBox) {
-        errorBox.classList.remove("hidden");
-        errorBox.textContent = error.message || "Diagnosis failed.";
-      }
+      // Network error — don't show a scary message, just wait for next poll.
+      console.warn("Poll error:", error);
     }
   };
 
   pollJob();
-  setInterval(pollJob, 1200);
+  pollInterval = setInterval(pollJob, 1500);
 </script>
 {% endif %}
 {% endblock %}

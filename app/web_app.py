@@ -1089,13 +1089,34 @@ def create_app(
             )
 
     @app.get("/diagnose/progress/{job_id}", response_class=HTMLResponse)
-    async def diagnose_progress_page(request: Request, job_id: str) -> HTMLResponse:
+    async def diagnose_progress_page(
+        request: Request,
+        job_id: str,
+        packet_id: str = "",
+    ) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
         auth_redirect = _require_authentication(request, viewer)
         if auth_redirect is not None:
             return auth_redirect
         job = job_registry.get(job_id)
+        # If the job is already done and we know the packet_id (from query param),
+        # redirect straight to the results — avoids the cross-instance registry miss.
+        if job is None and packet_id:
+            packet = _get_user_packet(runtime, viewer.user_id, packet_id)
+            if packet is not None:
+                return RedirectResponse(
+                    url=f"/diagnose?packet_id={packet_id}",
+                    status_code=303,
+                )
         if job is None or job.user_id != viewer.user_id:
+            # If we have a packet_id hint in the URL, try to recover directly.
+            if packet_id:
+                packet = _get_user_packet(runtime, viewer.user_id, packet_id)
+                if packet is not None:
+                    return RedirectResponse(
+                        url=f"/diagnose?packet_id={packet_id}",
+                        status_code=303,
+                    )
             return _render(
                 request,
                 "diagnose_progress.html",
@@ -1104,9 +1125,13 @@ def create_app(
                     "active_item": "diagnose",
                     "job": None,
                     "job_id": job_id,
+                    "packet_id": packet_id,
                     "error_message": "That diagnosis job is no longer available. Please run the diagnosis again.",
                 },
             )
+        # Embed the redirect_url and packet_id in the page so the JS can recover
+        # even if the job registry is gone by the next poll (Cloud Run scale-to-zero).
+        known_redirect = job.redirect_url or (f"/diagnose?packet_id={job.packet_id}" if job.packet_id else "")
         return _render(
             request,
             "diagnose_progress.html",
@@ -1115,6 +1140,8 @@ def create_app(
                 "active_item": "diagnose",
                 "job": job,
                 "job_id": job_id,
+                "packet_id": job.packet_id or packet_id,
+                "known_redirect_url": known_redirect,
                 "error_message": "",
             },
         )
