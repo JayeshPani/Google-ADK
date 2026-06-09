@@ -76,9 +76,13 @@
       }
       if ((payload.status === "quick_ready" || payload.status === "completed") && payload.redirect_url) {
         window.location.href = payload.redirect_url;
+        return;
       }
       if (payload.status === "failed") {
-        throw new Error(payload.error || "Diagnosis failed.");
+        const rawError = payload.error || "Diagnosis failed.";
+        const friendlyError = encodeURIComponent(rawError);
+        window.location.href = `/diagnose?error=${friendlyError}`;
+        return;
       }
     } catch (error) {
       if (errorBox) {

@@ -619,6 +619,41 @@ def _sorted_comparison_rows(comparison: MultiJDComparison, sort_key: str = "prio
     ]
 
 
+def _friendly_error(raw: str) -> str:
+    """Convert raw exception messages into user-readable error strings."""
+    if not raw:
+        return ""
+    lowered = raw.lower()
+    if any(token in lowered for token in ("rate exceeded", "rate_limit_exceeded", "resource_exhausted", "429", "too many requests", "quota exceeded")):
+        return (
+            "The AI model is busy right now (rate limit reached). "
+            "The diagnosis ran using the deterministic fallback, or you can try again in a moment."
+        )
+    if "503" in lowered or "unavailable" in lowered or "high demand" in lowered:
+        return "The AI model is temporarily unavailable. The deterministic fallback ran, or please try again in a few seconds."
+    if "timeout" in lowered or "timed out" in lowered or "deadline" in lowered:
+        return "The diagnosis timed out. Please try again — the deterministic analysis is usually faster."
+    if "demo case files are missing" in lowered:
+        return "One or more demo case files could not be found on the server. Please contact the administrator."
+    # Trim very long raw messages that expose internal stack info
+    trimmed = raw[:300]
+    if len(raw) > 300:
+        trimmed += "…"
+    return trimmed
+
+
+def _is_rate_limit_exception(exc: BaseException) -> bool:
+    """Check if an exception is a Gemini/ADK rate limit error."""
+    try:
+        from job_rejection_agent.google_models import is_resource_exhausted_error
+        if is_resource_exhausted_error(exc):
+            return True
+    except Exception:
+        pass
+    text = " ".join([exc.__class__.__name__, str(exc)]).upper()
+    return any(token in text for token in ("RATE EXCEEDED", "RATE_LIMIT_EXCEEDED", "RESOURCE_EXHAUSTED", "429", "TOO MANY REQUESTS"))
+
+
 def create_app(
     *,
     settings: Settings | None = None,
@@ -638,6 +673,45 @@ def create_app(
     app.state.optimizer = optimizer
     app.state.auth_service = auth_service
     app.state.diagnosis_jobs = job_registry
+
+    from fastapi import Request as _Request
+    from fastapi.responses import HTMLResponse as _HTMLResponse
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(_request: _Request, exc: Exception) -> _HTMLResponse:
+        """Catch any unhandled exception and render a user-friendly error page instead of plain text."""
+        viewer = _user_identity(_request, auth_service)
+        if _is_rate_limit_exception(exc):
+            msg = (
+                "The AI model is busy right now (rate limit reached). "
+                "Please try again in a moment — the deterministic analysis will run without the AI layer."
+            )
+        else:
+            msg = f"An unexpected error occurred: {str(exc)[:260]}"
+        return _render(
+            _request,
+            "diagnose.html",
+            viewer=viewer,
+            context=_diagnose_context(runtime, packet=None, error_message=msg),
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(_request: _Request, exc: StarletteHTTPException) -> _HTMLResponse:
+        """Render HTTP errors (404, 403, etc.) as the diagnose page with an error message."""
+        viewer = _user_identity(_request, auth_service)
+        if exc.status_code == 404:
+            msg = "The page or resource you requested could not be found."
+        elif exc.status_code == 403:
+            msg = "You do not have permission to access that resource."
+        else:
+            msg = f"HTTP {exc.status_code}: {exc.detail}"
+        return _render(
+            _request,
+            "diagnose.html",
+            viewer=viewer,
+            context=_diagnose_context(runtime, packet=None, error_message=msg),
+        )
 
     @app.get("/auth/google/start")
     async def google_oauth_start(
@@ -867,17 +941,20 @@ def create_app(
         packet_id: str = "",
         demo_case: str = "",
         job_id: str = "",
+        error: str = "",
     ) -> HTMLResponse:
         viewer = _user_identity(request, auth_service)
         auth_redirect = _require_authentication(request, viewer)
         if auth_redirect is not None:
             return auth_redirect
         packet = _get_user_packet(runtime, viewer.user_id, packet_id)
+        # Friendly message for common API errors surfaced via query param
+        error_message = _friendly_error(error) if error else ""
         return _render(
             request,
             "diagnose.html",
             viewer=viewer,
-            context=_diagnose_context(runtime, packet=packet, demo_case=demo_case, job_id=job_id),
+            context=_diagnose_context(runtime, packet=packet, demo_case=demo_case, job_id=job_id, error_message=error_message),
         )
 
     @app.post("/resume/preview-parse")
@@ -950,12 +1027,20 @@ def create_app(
             )
             optimizer.record_successful_diagnosis(packet_id=packet.packet_id, session_id=packet.session_id)
         except Exception as exc:
+            from job_rejection_agent.google_models import is_resource_exhausted_error
+            if is_resource_exhausted_error(exc):
+                friendly = (
+                    "The AI model is busy right now (rate limit reached). "
+                    "Try again in a moment — the deterministic analysis will run without the AI layer."
+                )
+            else:
+                friendly = str(exc)[:400]
             job_registry.update(
                 job_id,
                 status="failed",
                 current_step="Diagnosis failed",
                 progress_percent=100,
-                error=str(exc),
+                error=friendly,
             )
         finally:
             if temp_path is not None and temp_path.exists():
@@ -987,12 +1072,20 @@ def create_app(
             )
             optimizer.record_successful_diagnosis(packet_id=packet_id, session_id=result.packet.session_id)
         except Exception as exc:
+            from job_rejection_agent.google_models import is_resource_exhausted_error
+            if is_resource_exhausted_error(exc):
+                friendly = (
+                    "The AI model is busy right now (rate limit reached). "
+                    "Try again in a moment — the deterministic analysis will run without the AI layer."
+                )
+            else:
+                friendly = str(exc)[:400]
             job_registry.update(
                 job_id,
                 status="failed",
                 current_step="Full report failed",
                 progress_percent=100,
-                error=str(exc),
+                error=friendly,
             )
 
     @app.get("/diagnose/progress/{job_id}", response_class=HTMLResponse)

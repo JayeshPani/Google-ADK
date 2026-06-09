@@ -74,8 +74,12 @@ def is_resource_exhausted_error(exc: BaseException | None) -> bool:
         ).upper()
         if (
             "RESOURCE_EXHAUSTED" in text
+            or "RATE_LIMIT_EXCEEDED" in text
+            or "RATE EXCEEDED" in text
             or "503 UNAVAILABLE" in text
             or "CURRENTLY EXPERIENCING HIGH DEMAND" in text
+            or "TOO MANY REQUESTS" in text
+            or "QUOTA EXCEEDED" in text
         ):
             return True
         current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
