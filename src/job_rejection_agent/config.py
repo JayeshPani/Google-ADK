@@ -26,9 +26,10 @@ PROMPT_HISTORY_DIR = ROOT_DIR / "prompt_history"
 @dataclass(slots=True)
 class Settings:
     app_name: str = "job-rejection-agent"
-    model_id: str = "gemini-2.5-flash"
-    eval_model_id: str = "gemini-2.5-flash"
+    model_id: str = "gemini-2.5-pro"
+    eval_model_id: str = "gemini-2.5-pro"
     model_fallbacks: tuple[str, ...] = (
+        "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite",
@@ -36,6 +37,7 @@ class Settings:
         "gemini-1.5-flash-8b",
     )
     eval_model_fallbacks: tuple[str, ...] = (
+        "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite",
@@ -178,11 +180,12 @@ def get_settings() -> Settings:
     phoenix_collector_endpoint = os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "https://app.phoenix.arize.com")
     phoenix_mcp_command = os.getenv("PHOENIX_MCP_COMMAND", _default_mcp_command())
     return Settings(
-        model_id=os.getenv("MODEL_ID", "gemini-2.5-flash"),
-        eval_model_id=os.getenv("EVAL_MODEL_ID", os.getenv("MODEL_ID", "gemini-2.5-flash")),
+        model_id=os.getenv("MODEL_ID", "gemini-2.5-pro"),
+        eval_model_id=os.getenv("EVAL_MODEL_ID", os.getenv("MODEL_ID", "gemini-2.5-pro")),
         model_fallbacks=_read_model_list(
             os.getenv("MODEL_FALLBACKS"),
             default=(
+                "gemini-2.5-flash",
                 "gemini-2.5-flash-lite",
                 "gemini-2.0-flash",
                 "gemini-2.0-flash-lite",
@@ -193,6 +196,7 @@ def get_settings() -> Settings:
         eval_model_fallbacks=_read_model_list(
             os.getenv("EVAL_MODEL_FALLBACKS"),
             default=(
+                "gemini-2.5-flash",
                 "gemini-2.5-flash-lite",
                 "gemini-2.0-flash",
                 "gemini-2.0-flash-lite",
